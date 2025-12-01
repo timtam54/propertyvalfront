@@ -1,0 +1,43 @@
+{
+  "name": "propertyval",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "^4.26.2",
+    "@azure/msal-react": "^3.0.22",
+    "@react-oauth/google": "^0.12.2",
+    "@types/uuid": "^10.0.0",
+    "axios": "^1.8.4",
+    "clsx": "^2.1.1",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
+    "lucide-react": "^0.507.0",
+    "mongodb": "^7.0.0",
+    "next": "16.0.4",
+    "openai": "^6.9.1",
+    "pdfjs-dist": "^5.4.449",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "sonner": "^2.0.3",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/google.maps": "^3.58.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.4",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

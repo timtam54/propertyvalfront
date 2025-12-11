@@ -1108,9 +1108,9 @@ export default function HomePage() {
                     <option value="">All Types</option>
                     <option value="House">House</option>
                     <option value="Apartment">Apartment</option>
+                    <option value="Unit">Unit</option>
                     <option value="Villa">Villa</option>
                     <option value="Townhouse">Townhouse</option>
-                    <option value="Condo">Condo</option>
                   </select>
                 </div>
 
@@ -1308,9 +1308,9 @@ export default function HomePage() {
                   <option value="">Select type</option>
                   <option value="House">House</option>
                   <option value="Apartment">Apartment</option>
+                  <option value="Unit">Unit</option>
                   <option value="Villa">Villa</option>
                   <option value="Townhouse">Townhouse</option>
-                  <option value="Condo">Condo</option>
                 </select>
               </div>
 

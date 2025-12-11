@@ -65,6 +65,7 @@ function parseLocation(location: string): { suburb: string; state: string; postc
   }
 
   if (parts.length >= 2) {
+    // Has comma - take the second part (suburb)
     let suburbPart = parts[1];
     suburbPart = suburbPart
       .replace(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/gi, '')
@@ -72,7 +73,14 @@ function parseLocation(location: string): { suburb: string; state: string; postc
       .trim();
     suburb = suburbPart.toLowerCase().replace(/\s+/g, '-');
   } else {
-    suburb = parts[0].toLowerCase().replace(/\s+/g, '-');
+    // No comma - extract suburb by removing street number, state, and postcode
+    let suburbPart = parts[0]
+      .replace(/^\d+[a-zA-Z]?\s+/, '')  // Remove street number (e.g., "123 " or "45A ")
+      .replace(/\b(street|st|road|rd|avenue|ave|drive|dr|court|ct|place|pl|lane|ln|crescent|cr|way|boulevard|blvd)\b.*/i, '')  // Remove street type and after
+      .replace(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/gi, '')
+      .replace(/\b\d{4}\b/g, '')
+      .trim();
+    suburb = suburbPart.toLowerCase().replace(/\s+/g, '-');
   }
 
   suburb = suburb.replace(/^\d+\s*-*/, '').replace(/-+$/, '').replace(/^-+/, '');

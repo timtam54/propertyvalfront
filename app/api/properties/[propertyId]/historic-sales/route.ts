@@ -184,11 +184,11 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     }
 
     console.log(`[Historic Sales] Extracted ${properties.length} valid properties`);
-    return { properties, scrapedUrl: url };
+    return { properties, scrapedUrl: targetUrl };
 
   } catch (error: any) {
     console.log(`[Historic Sales] Error: ${error.message}`);
-    return { properties: [], scrapedUrl: url };
+    return { properties: [], scrapedUrl: targetUrl };
   }
 }
 

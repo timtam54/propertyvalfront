@@ -34,6 +34,7 @@ const PROPERTY_TYPE_TO_FILTER: { [key: string]: string } = {
   'land': 'land',
   'acreage': 'acreage',
   'rural': 'rural',
+  'rural property': 'rural',
   'block of units': 'block-of-units',
 };
 

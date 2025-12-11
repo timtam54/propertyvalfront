@@ -83,7 +83,7 @@ export default function PropertyDetailPage() {
   const [historicSales, setHistoricSales] = useState<any[]>([]);
   const [historicSalesLoading, setHistoricSalesLoading] = useState(false);
   const [historicSalesError, setHistoricSalesError] = useState<string | null>(null);
-  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null; propertyType: string; searchedAt: string | null; cached: boolean } | null>(null);
+  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null; propertyType: string; searchedAt: string | null; cached: boolean; scrapedUrl?: string } | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [markingSold, setMarkingSold] = useState(false);
@@ -125,7 +125,8 @@ export default function PropertyDetailPage() {
         postcode: data.postcode,
         propertyType: data.propertyType || 'all',
         searchedAt: data.searchedAt || null,
-        cached: data.cached || false
+        cached: data.cached || false,
+        scrapedUrl: data.scrapedUrl || null
       });
 
       // Show toast based on whether data was cached or freshly scraped
@@ -618,7 +619,13 @@ export default function PropertyDetailPage() {
                 Data {historicSalesInfo.cached ? 'cached' : 'fetched'} on {new Date(historicSalesInfo.searchedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.
               </span>
             )}
-            <span className="ml-1">Source: Homely.com.au</span>
+            {historicSalesInfo?.scrapedUrl ? (
+              <span className="ml-1">
+                Source: <a href={historicSalesInfo.scrapedUrl} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline hover:text-purple-800">{historicSalesInfo.scrapedUrl}</a>
+              </span>
+            ) : (
+              <span className="ml-1">Source: Homely.com.au</span>
+            )}
           </p>
 
           <div className="bg-purple-50 rounded-xl p-5 border border-purple-200">

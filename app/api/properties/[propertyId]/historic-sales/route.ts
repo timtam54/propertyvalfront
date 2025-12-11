@@ -31,6 +31,7 @@ const PROPERTY_TYPE_TO_HOMELY: { [key: string]: string } = {
   'land': 'land',
   'acreage': 'acreage',
   'rural': 'rural',
+  'rural property': 'rural',
   'block of units': 'block-of-units',
 };
 
@@ -62,6 +63,7 @@ function parseLocation(location: string): { suburb: string; state: string; postc
   }
 
   if (parts.length >= 2) {
+    // Has comma - take the second part (suburb)
     let suburbPart = parts[1];
     suburbPart = suburbPart
       .replace(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/gi, '')
@@ -69,7 +71,14 @@ function parseLocation(location: string): { suburb: string; state: string; postc
       .trim();
     suburb = suburbPart.toLowerCase().replace(/\s+/g, '-');
   } else {
-    suburb = parts[0].toLowerCase().replace(/\s+/g, '-');
+    // No comma - extract suburb by removing street number, state, and postcode
+    let suburbPart = parts[0]
+      .replace(/^\d+[a-zA-Z]?\s+/, '')  // Remove street number (e.g., "123 " or "45A ")
+      .replace(/\b(street|st|road|rd|avenue|ave|drive|dr|court|ct|place|pl|lane|ln|crescent|cr|way|boulevard|blvd)\b.*/i, '')  // Remove street type and after
+      .replace(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/gi, '')
+      .replace(/\b\d{4}\b/g, '')
+      .trim();
+    suburb = suburbPart.toLowerCase().replace(/\s+/g, '-');
   }
 
   suburb = suburb.replace(/^\d+\s*-*/, '').replace(/-+$/, '').replace(/^-+/, '');
@@ -79,8 +88,9 @@ function parseLocation(location: string): { suburb: string; state: string; postc
 
 /**
  * Scrape sold properties from Homely.com.au (no caching - returns fresh data)
+ * Returns both the properties and the URL that was scraped
  */
-async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<SoldProperty[]> {
+async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<{ properties: SoldProperty[], scrapedUrl: string }> {
   let url = postcode
     ? `https://www.homely.com.au/sold-properties/${suburb}-${state}-${postcode}`
     : `https://www.homely.com.au/sold-properties/${suburb}-${state}`;
@@ -101,7 +111,7 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
 
     if (!response.ok) {
       console.log(`[Historic Sales] HTTP ${response.status}`);
-      return [];
+      return { properties: [], scrapedUrl: url };
     }
 
     const html = await response.text();
@@ -110,7 +120,7 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!nextDataMatch) {
       console.log('[Historic Sales] No __NEXT_DATA__ found');
-      return [];
+      return { properties: [], scrapedUrl: url };
     }
 
     const nextData = JSON.parse(nextDataMatch[1]);
@@ -154,11 +164,11 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     }
 
     console.log(`[Historic Sales] Extracted ${properties.length} valid properties`);
-    return properties;
+    return { properties, scrapedUrl: url };
 
   } catch (error: any) {
     console.log(`[Historic Sales] Error: ${error.message}`);
-    return [];
+    return { properties: [], scrapedUrl: url };
   }
 }
 
@@ -190,7 +200,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.log(`[Historic Sales] Parsed: suburb=${suburb}, state=${state}, postcode=${postcode}, propertyType=${propertyType}`);
 
     // Scrape fresh data from Homely (no caching)
-    const scrapedProperties = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
+    const { properties: scrapedProperties, scrapedUrl } = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
     const searchedAt = new Date().toISOString();
 
     // Sort by sold_date_raw descending
@@ -221,7 +231,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       propertyType: propertyType || 'all',
       cached: false,
       searchedAt: searchedAt,
-      total: sortedProperties.length
+      total: sortedProperties.length,
+      scrapedUrl: scrapedUrl
     });
 
   } catch (error) {

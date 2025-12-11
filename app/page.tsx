@@ -603,7 +603,7 @@ export default function HomePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.beds || !formData.baths || !formData.carpark || !formData.location) {
+    if (!formData.beds || !formData.baths || !formData.carpark || !formData.location || !formData.property_type) {
       toast.error("Please fill in all required fields");
       return;
     }
@@ -1297,12 +1297,13 @@ export default function HomePage() {
               </div>
 
               <div>
-                <label style={labelStyle}>Property Type</label>
+                <label style={labelStyle}>Property Type *</label>
                 <select
                   name="property_type"
                   value={formData.property_type}
                   onChange={handleInputChange}
                   style={inputStyle}
+                  required
                 >
                   <option value="">Select type</option>
                   <option value="House">House</option>

@@ -91,37 +91,41 @@ function parseLocation(location: string): { suburb: string; state: string; postc
 
 /**
  * Scrape sold properties from Homely.com.au (no caching - returns fresh data)
+ * Uses ScraperAPI proxy if SCRAPER_API_KEY is set (recommended for Vercel deployment)
  */
 async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<SoldProperty[]> {
-  let url = postcode
+  let targetUrl = postcode
     ? `https://www.homely.com.au/sold-properties/${suburb}-${state}-${postcode}`
     : `https://www.homely.com.au/sold-properties/${suburb}-${state}`;
 
   if (propertyType) {
-    url += `?propertytype=${propertyType}`;
+    targetUrl += `?propertytype=${propertyType}`;
   }
 
-  console.log(`[Evaluate] Scraping: ${url}`);
+  // Use ScraperAPI proxy if available (bypasses IP blocking on Vercel)
+  const scraperApiKey = process.env.SCRAPER_API_KEY;
+  let fetchUrl: string;
+  let fetchOptions: RequestInit;
 
-  try {
-    const response = await fetch(url, {
+  if (scraperApiKey) {
+    fetchUrl = `https://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false`;
+    fetchOptions = {};
+    console.log(`[Evaluate] Using ScraperAPI proxy for: ${targetUrl}`);
+  } else {
+    fetchUrl = targetUrl;
+    fetchOptions = {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'en-AU,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"macOS"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
       }
-    });
+    };
+    console.log(`[Evaluate] Direct fetch (no proxy): ${targetUrl}`);
+  }
+
+  try {
+    const response = await fetch(fetchUrl, fetchOptions);
 
     if (!response.ok) {
       console.log(`[Evaluate] HTTP ${response.status}`);
@@ -131,7 +135,7 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     const html = await response.text();
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!nextDataMatch) {
-      console.log(`[Evaluate] No __NEXT_DATA__ found. HTML length: ${html.length}`);
+      console.log(`[Evaluate] No __NEXT_DATA__ found. HTML length: ${html.length}. Using proxy: ${!!scraperApiKey}`);
       return [];
     }
 

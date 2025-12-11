@@ -89,41 +89,47 @@ function parseLocation(location: string): { suburb: string; state: string; postc
 /**
  * Scrape sold properties from Homely.com.au (no caching - returns fresh data)
  * Returns both the properties and the URL that was scraped
+ * Uses ScraperAPI proxy if SCRAPER_API_KEY is set (recommended for Vercel deployment)
  */
 async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<{ properties: SoldProperty[], scrapedUrl: string, debug?: string }> {
-  let url = postcode
+  let targetUrl = postcode
     ? `https://www.homely.com.au/sold-properties/${suburb}-${state}-${postcode}`
     : `https://www.homely.com.au/sold-properties/${suburb}-${state}`;
 
   if (propertyType) {
-    url += `?propertytype=${propertyType}`;
+    targetUrl += `?propertytype=${propertyType}`;
   }
 
-  console.log(`[Historic Sales] Fetching: ${url}`);
+  // Use ScraperAPI proxy if available (bypasses IP blocking on Vercel)
+  const scraperApiKey = process.env.SCRAPER_API_KEY;
+  let fetchUrl: string;
+  let fetchOptions: RequestInit;
 
-  try {
-    const response = await fetch(url, {
+  if (scraperApiKey) {
+    // Use ScraperAPI proxy
+    fetchUrl = `https://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(targetUrl)}&render=false`;
+    fetchOptions = {};
+    console.log(`[Historic Sales] Using ScraperAPI proxy for: ${targetUrl}`);
+  } else {
+    // Direct fetch (works locally, may be blocked on Vercel)
+    fetchUrl = targetUrl;
+    fetchOptions = {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'en-AU,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"macOS"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
       }
-    });
+    };
+    console.log(`[Historic Sales] Direct fetch (no proxy): ${targetUrl}`);
+  }
+
+  try {
+    const response = await fetch(fetchUrl, fetchOptions);
 
     if (!response.ok) {
       console.log(`[Historic Sales] HTTP ${response.status}`);
-      return { properties: [], scrapedUrl: url, debug: `HTTP ${response.status}` };
+      return { properties: [], scrapedUrl: targetUrl, debug: `HTTP ${response.status}. ${scraperApiKey ? 'Using ScraperAPI' : 'No proxy - add SCRAPER_API_KEY to bypass Vercel IP blocking'}` };
     }
 
     const html = await response.text();
@@ -132,10 +138,9 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!nextDataMatch) {
       console.log('[Historic Sales] No __NEXT_DATA__ found');
-      // Return debug info about what we got
       const preview = html.substring(0, 500);
-      const hasBlockedMessage = html.includes('blocked') || html.includes('captcha') || html.includes('robot');
-      return { properties: [], scrapedUrl: url, debug: `No __NEXT_DATA__. Blocked: ${hasBlockedMessage}. Preview: ${preview}` };
+      const hasBlockedMessage = html.includes('blocked') || html.includes('captcha') || html.includes('robot') || html.includes('Access Denied');
+      return { properties: [], scrapedUrl: targetUrl, debug: `No __NEXT_DATA__. Blocked: ${hasBlockedMessage}. ${scraperApiKey ? 'Using ScraperAPI' : 'No proxy configured - Homely is blocking Vercel IPs. Add SCRAPER_API_KEY env var.'}. Preview: ${preview}` };
     }
 
     const nextData = JSON.parse(nextDataMatch[1]);

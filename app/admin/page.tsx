@@ -6,8 +6,9 @@ import Link from 'next/link';
 import {
   ArrowLeft, Users, Activity, BarChart3, Clock,
   Globe, FileText, RefreshCw, ChevronDown, ChevronUp,
-  Calendar, Eye, TrendingUp
+  Calendar, Eye, TrendingUp, Settings, Key
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { API } from '@/lib/config';
 import { usePageView } from '@/hooks/useAudit';
 
@@ -51,13 +52,36 @@ interface AuditRecord {
   propertyid: number;
 }
 
+interface ApiKeys {
+  domain_api_key: string | null;
+  corelogic_client_key: string | null;
+  corelogic_secret_key: string | null;
+  realestate_api_key: string | null;
+  pricefinder_api_key: string | null;
+  google_places_api_key: string | null;
+}
+
+interface SoldProperty {
+  id: string;
+  location: string;
+  beds: number;
+  baths: number;
+  carpark: number;
+  price: number;
+  sold_price: number;
+  sale_date: string;
+  images: string[];
+  property_type?: string;
+  user_email?: string;
+}
+
 export default function AdminPage() {
   const router = useRouter();
 
   // Track page view for audit
   usePageView('admin');
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'activity' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'activity' | 'settings' | 'reports'>('overview');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserStats[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
@@ -70,13 +94,35 @@ export default function AdminPage() {
   const [auditTotal, setAuditTotal] = useState(0);
   const RECORDS_PER_PAGE = 50;
 
+  // Sold properties state
+  const [soldProperties, setSoldProperties] = useState<SoldProperty[]>([]);
+  const [loadingSold, setLoadingSold] = useState(false);
+
+  // Audit loading state
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
+  // Settings state
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [apiSettings, setApiSettings] = useState<ApiKeys>({
+    domain_api_key: '',
+    corelogic_client_key: '',
+    corelogic_secret_key: '',
+    realestate_api_key: '',
+    pricefinder_api_key: '',
+    google_places_api_key: ''
+  });
+
   useEffect(() => {
     loadData();
+    loadApiSettings();
   }, []);
 
   useEffect(() => {
     if (activeTab === 'activity') {
       loadAuditRecords();
+    }
+    if (activeTab === 'reports') {
+      loadSoldProperties();
     }
   }, [activeTab, auditPage, userFilter, pageFilter]);
 
@@ -109,7 +155,62 @@ export default function AdminPage() {
     }
   };
 
+  const loadApiSettings = async () => {
+    try {
+      const response = await fetch(`${API}/api-settings`);
+      const data = await response.json();
+
+      if (data.success && data.settings) {
+        setApiSettings({
+          domain_api_key: data.settings.domain_api_key || '',
+          corelogic_client_key: data.settings.corelogic_client_key || '',
+          corelogic_secret_key: data.settings.corelogic_secret_key || '',
+          realestate_api_key: data.settings.realestate_api_key || '',
+          pricefinder_api_key: data.settings.pricefinder_api_key || '',
+          google_places_api_key: data.settings.google_places_api_key || ''
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load API settings:', err);
+    }
+  };
+
+  const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setApiSettings(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSettings(true);
+
+    try {
+      const response = await fetch(`${API}/api-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiSettings)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('API settings saved successfully!');
+        await loadApiSettings();
+      } else {
+        toast.error('Failed to save API settings');
+      }
+    } catch (err) {
+      toast.error('Error saving API settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const loadAuditRecords = async () => {
+    setLoadingAudit(true);
     try {
       const params = new URLSearchParams({
         limit: RECORDS_PER_PAGE.toString(),
@@ -126,7 +227,30 @@ export default function AdminPage() {
       setAuditTotal(data.total || 0);
     } catch (error) {
       console.error('Failed to load audit records:', error);
+    } finally {
+      setLoadingAudit(false);
     }
+  };
+
+  const loadSoldProperties = async () => {
+    setLoadingSold(true);
+    try {
+      const response = await fetch(`${API}/properties/sold/list`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSoldProperties(data.properties || []);
+      }
+    } catch (error) {
+      console.error('Failed to load sold properties:', error);
+    } finally {
+      setLoadingSold(false);
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    if (!price) return 'N/A';
+    return `$${price.toLocaleString()}`;
   };
 
   const formatDate = (dateStr: string) => {
@@ -153,69 +277,75 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading admin dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading admin dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header className="bg-slate-900 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               <Link
                 href="/"
-                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
-                <span className="hidden sm:inline">Back to App</span>
+                <span className="hidden sm:inline">Back</span>
               </Link>
-              <div className="h-6 w-px bg-gray-300" />
-              <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+              <div className="h-6 w-px bg-slate-700" />
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 to-emerald-400 rounded-lg flex items-center justify-center">
+                  <Settings className="w-4 h-4 text-slate-900" />
+                </div>
+                <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
+              </div>
             </div>
             <button
               onClick={loadData}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
             >
               <RefreshCw className="w-4 h-4" />
               <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </div>
-      </header>
 
-      {/* Tabs */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex gap-1 overflow-x-auto">
-            {[
-              { id: 'overview', label: 'Overview', icon: BarChart3 },
-              { id: 'users', label: 'Users', icon: Users },
-              { id: 'activity', label: 'Activity Log', icon: Activity },
-              { id: 'reports', label: 'Reports', icon: FileText }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-cyan-500 text-cyan-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+        {/* Tabs - integrated into header */}
+        <div className="border-t border-slate-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav className="flex gap-1 overflow-x-auto -mb-px">
+              {[
+                { id: 'overview', label: 'Overview', icon: BarChart3 },
+                { id: 'users', label: 'Users', icon: Users },
+                { id: 'activity', label: 'Activity Log', icon: Activity },
+                { id: 'settings', label: 'Settings', icon: Settings },
+                { id: 'reports', label: 'Reports', icon: FileText }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                  className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium transition-colors whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-cyan-400 text-cyan-400'
+                      : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
-      </div>
+      </header>
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -535,71 +665,203 @@ export default function AdminPage() {
                   </span>
                 </h3>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property ID</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {auditRecords.map(record => (
-                      <tr key={record.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                          {formatDate(record.dte)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {record.username || 'anonymous'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 text-cyan-800">
-                            {record.page}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-700">
-                          {record.action}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 font-mono">
-                          {record.ipaddress}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {record.propertyid || '-'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              {loadingAudit ? (
+                <div className="p-12 text-center">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto mb-4"></div>
+                  <p className="text-gray-500">Loading activity log...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Page</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property ID</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {auditRecords.map(record => (
+                          <tr key={record.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                              {formatDate(record.dte)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              {record.username || 'anonymous'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 text-cyan-800">
+                                {record.page}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              {record.action}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500 font-mono">
+                              {record.ipaddress}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {record.propertyid || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {auditTotal > RECORDS_PER_PAGE && (
+                    <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                      <p className="text-sm text-gray-500">
+                        Showing {auditPage * RECORDS_PER_PAGE + 1} to {Math.min((auditPage + 1) * RECORDS_PER_PAGE, auditTotal)} of {auditTotal}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAuditPage(p => Math.max(0, p - 1))}
+                          disabled={auditPage === 0}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          onClick={() => setAuditPage(p => p + 1)}
+                          disabled={(auditPage + 1) * RECORDS_PER_PAGE >= auditTotal}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            {/* Quick Links */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div
+                onClick={() => router.push('/settings/marketing')}
+                className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl p-6 cursor-pointer hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-blue-500 rounded-lg">
+                    <FileText className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-blue-900">Marketing Packages</h3>
+                </div>
+                <p className="text-blue-700 text-sm">Configure marketing packages with different pricing tiers.</p>
               </div>
 
-              {/* Pagination */}
-              {auditTotal > RECORDS_PER_PAGE && (
-                <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
-                  <p className="text-sm text-gray-500">
-                    Showing {auditPage * RECORDS_PER_PAGE + 1} to {Math.min((auditPage + 1) * RECORDS_PER_PAGE, auditTotal)} of {auditTotal}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setAuditPage(p => Math.max(0, p - 1))}
-                      disabled={auditPage === 0}
-                      className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setAuditPage(p => p + 1)}
-                      disabled={(auditPage + 1) * RECORDS_PER_PAGE >= auditTotal}
-                      className="px-3 py-1 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Next
-                    </button>
+              <div
+                onClick={() => router.push('/settings/market')}
+                className="bg-gradient-to-br from-amber-50 to-amber-100 border-2 border-amber-300 rounded-xl p-6 cursor-pointer hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-amber-500 rounded-lg">
+                    <TrendingUp className="w-5 h-5 text-white" />
                   </div>
+                  <h3 className="text-lg font-semibold text-amber-900">Market Context</h3>
                 </div>
-              )}
+                <p className="text-amber-700 text-sm">Update interest rates and market statistics.</p>
+              </div>
+            </div>
+
+            {/* API Keys Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <Key className="w-5 h-5 text-gray-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Property Data API Keys</h3>
+                  <p className="text-sm text-gray-500">Add API keys for property data services to get more accurate valuations.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveSettings} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Domain.com.au API Key
+                  </label>
+                  <input
+                    type="text"
+                    name="domain_api_key"
+                    value={apiSettings.domain_api_key || ''}
+                    onChange={handleSettingsChange}
+                    placeholder="Enter Domain API key (optional)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Realestate.com.au API Key
+                  </label>
+                  <input
+                    type="text"
+                    name="realestate_api_key"
+                    value={apiSettings.realestate_api_key || ''}
+                    onChange={handleSettingsChange}
+                    placeholder="Enter Realestate.com.au API key (optional)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    PriceFinder API Key
+                  </label>
+                  <input
+                    type="text"
+                    name="pricefinder_api_key"
+                    value={apiSettings.pricefinder_api_key || ''}
+                    onChange={handleSettingsChange}
+                    placeholder="Enter PriceFinder API key (optional)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Google Places API Key
+                  </label>
+                  <input
+                    type="text"
+                    name="google_places_api_key"
+                    value={apiSettings.google_places_api_key || ''}
+                    onChange={handleSettingsChange}
+                    placeholder="Enter Google Places API key (optional)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    disabled={savingSettings}
+                    className="px-6 py-2 bg-cyan-500 text-white rounded-lg font-medium hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+                  >
+                    {savingSettings ? 'Saving...' : 'Save API Settings'}
+                  </button>
+                </div>
+              </form>
+
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> Without API keys, the app uses free web scraping to get property data.
+                  This may be slower but provides basic comparable property data at no cost.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -607,82 +869,165 @@ export default function AdminPage() {
         {/* Reports Tab */}
         {activeTab === 'reports' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Available Reports</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-cyan-100 rounded-lg">
-                      <Users className="w-5 h-5 text-cyan-600" />
+            {/* Sold Properties Summary */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-emerald-50 to-green-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-500 rounded-lg">
+                      <TrendingUp className="w-5 h-5 text-white" />
                     </div>
-                    <h4 className="font-medium text-gray-900">User Activity Report</h4>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Sold Properties Report</h3>
+                      <p className="text-sm text-gray-500">All properties marked as sold across all users</p>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-500 mb-3">Summary of all user activity including page visits, login times, and engagement metrics.</p>
-                  <p className="text-xs text-gray-400">Export as CSV or PDF</p>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-emerald-600">{soldProperties.length}</p>
+                    <p className="text-sm text-gray-500">Total Sold</p>
+                  </div>
                 </div>
 
-                <div className="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <BarChart3 className="w-5 h-5 text-green-600" />
+                {/* Summary Stats */}
+                {soldProperties.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg p-3 border border-gray-200">
+                      <p className="text-xs text-gray-500">Total Value</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        ${(soldProperties.reduce((sum, p) => sum + (p.sold_price || 0), 0) / 1000000).toFixed(2)}M
+                      </p>
                     </div>
-                    <h4 className="font-medium text-gray-900">Usage Analytics</h4>
-                  </div>
-                  <p className="text-sm text-gray-500 mb-3">Detailed analytics on feature usage, popular pages, and user journeys.</p>
-                  <p className="text-xs text-gray-400">Export as CSV or PDF</p>
-                </div>
-
-                <div className="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Calendar className="w-5 h-5 text-purple-600" />
+                    <div className="bg-white rounded-lg p-3 border border-gray-200">
+                      <p className="text-xs text-gray-500">Avg Sale Price</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        ${Math.round(soldProperties.reduce((sum, p) => sum + (p.sold_price || 0), 0) / soldProperties.length / 1000)}K
+                      </p>
                     </div>
-                    <h4 className="font-medium text-gray-900">Monthly Summary</h4>
-                  </div>
-                  <p className="text-sm text-gray-500 mb-3">Month-over-month comparison of key metrics and growth indicators.</p>
-                  <p className="text-xs text-gray-400">Export as CSV or PDF</p>
-                </div>
-
-                <div className="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-orange-100 rounded-lg">
-                      <Globe className="w-5 h-5 text-orange-600" />
+                    <div className="bg-white rounded-lg p-3 border border-gray-200">
+                      <p className="text-xs text-gray-500">Avg vs List</p>
+                      <p className={`text-lg font-bold ${
+                        (() => {
+                          const propsWithBoth = soldProperties.filter(p => p.price && p.sold_price);
+                          if (propsWithBoth.length === 0) return 'text-gray-500';
+                          const avgDiff = propsWithBoth.reduce((sum, p) => sum + ((p.sold_price - p.price) / p.price * 100), 0) / propsWithBoth.length;
+                          return avgDiff >= 0 ? 'text-emerald-600' : 'text-red-600';
+                        })()
+                      }`}>
+                        {(() => {
+                          const propsWithBoth = soldProperties.filter(p => p.price && p.sold_price);
+                          if (propsWithBoth.length === 0) return 'N/A';
+                          const avgDiff = propsWithBoth.reduce((sum, p) => sum + ((p.sold_price - p.price) / p.price * 100), 0) / propsWithBoth.length;
+                          return `${avgDiff >= 0 ? '+' : ''}${avgDiff.toFixed(1)}%`;
+                        })()}
+                      </p>
                     </div>
-                    <h4 className="font-medium text-gray-900">Geographic Report</h4>
-                  </div>
-                  <p className="text-sm text-gray-500 mb-3">User distribution by IP location and access patterns.</p>
-                  <p className="text-xs text-gray-400">Export as CSV or PDF</p>
-                </div>
-
-                <div className="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-red-100 rounded-lg">
-                      <Activity className="w-5 h-5 text-red-600" />
+                    <div className="bg-white rounded-lg p-3 border border-gray-200">
+                      <p className="text-xs text-gray-500">This Month</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {soldProperties.filter(p => {
+                          if (!p.sale_date) return false;
+                          const saleDate = new Date(p.sale_date);
+                          const now = new Date();
+                          return saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
+                        }).length}
+                      </p>
                     </div>
-                    <h4 className="font-medium text-gray-900">Audit Trail Export</h4>
                   </div>
-                  <p className="text-sm text-gray-500 mb-3">Complete audit log export for compliance and record-keeping.</p>
-                  <p className="text-xs text-gray-400">Export as CSV</p>
-                </div>
-
-                <div className="border border-gray-200 rounded-lg p-4 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <FileText className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <h4 className="font-medium text-gray-900">Property Reports</h4>
-                  </div>
-                  <p className="text-sm text-gray-500 mb-3">Summary of property evaluations and activities.</p>
-                  <p className="text-xs text-gray-400">Export as CSV or PDF</p>
-                </div>
+                )}
               </div>
-            </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-amber-800 text-sm">
-                <strong>Note:</strong> Report generation functionality will be available in a future update.
-                Currently, you can view all data in the Overview and Activity tabs.
-              </p>
+              {/* Sold Properties Table */}
+              {loadingSold ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto mb-3"></div>
+                  <p className="text-gray-500">Loading sold properties...</p>
+                </div>
+              ) : soldProperties.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No sold properties yet</p>
+                  <p className="text-sm mt-1">Properties marked as sold will appear here</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">List Price</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sold Price</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difference</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {soldProperties.map(property => {
+                        const priceDiff = property.price && property.sold_price
+                          ? ((property.sold_price - property.price) / property.price * 100)
+                          : null;
+
+                        return (
+                          <tr key={property.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                {property.images?.[0] ? (
+                                  <img
+                                    src={property.images[0]}
+                                    alt={property.location}
+                                    className="w-12 h-12 rounded-lg object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                                    <FileText className="w-5 h-5 text-gray-400" />
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="font-medium text-gray-900 text-sm">{property.location}</p>
+                                  {property.property_type && (
+                                    <span className="text-xs text-gray-500">{property.property_type}</span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              <span className="inline-flex items-center gap-2">
+                                <span>🛏 {property.beds}</span>
+                                <span>🛁 {property.baths}</span>
+                                <span>🚗 {property.carpark}</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              {formatPrice(property.price)}
+                            </td>
+                            <td className="px-4 py-3 text-sm font-semibold text-emerald-600">
+                              {formatPrice(property.sold_price)}
+                            </td>
+                            <td className="px-4 py-3">
+                              {priceDiff !== null ? (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  priceDiff >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {priceDiff >= 0 ? '+' : ''}{priceDiff.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 text-sm">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-700">
+                              {property.sale_date ? formatDate(property.sale_date) : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {property.user_email || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

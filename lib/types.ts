@@ -4,6 +4,76 @@ export interface InclusionItem {
   price: number;
 }
 
+// Historical valuation entry
+export interface ValuationHistoryEntry {
+  date: string;
+  estimated_value: number;
+  value_low: number;
+  value_high: number;
+  confidence_score: number;
+  confidence_level: 'high' | 'medium' | 'low';
+  data_source: string;
+  comparables_count: number;
+  notes?: string;
+}
+
+// Comparable property with selection state
+export interface ComparableProperty {
+  id: string;
+  address: string;
+  price: number;
+  beds: number | null;
+  baths: number | null;
+  carpark: number | null;
+  property_type: string;
+  sold_date?: string;
+  distance_km?: number;
+  similarity_score?: number;
+  source?: string;
+  selected?: boolean; // For manual selection
+  land_size?: number | null;
+  building_size?: number | null;
+}
+
+// Confidence scoring breakdown
+export interface ConfidenceScoring {
+  overall_score: number; // 0-100
+  level: 'high' | 'medium' | 'low';
+  factors: {
+    comparables_count: { score: number; weight: number; description: string };
+    data_recency: { score: number; weight: number; description: string };
+    location_match: { score: number; weight: number; description: string };
+    property_similarity: { score: number; weight: number; description: string };
+    price_consistency: { score: number; weight: number; description: string };
+  };
+  recommendations: string[];
+}
+
+// Suburb market trends
+export interface SuburbMarketTrends {
+  suburb: string;
+  state: string;
+  last_updated: string;
+  median_price: number;
+  median_price_change_12m: number; // percentage
+  days_on_market: number;
+  days_on_market_change: number;
+  auction_clearance_rate: number;
+  total_sales_12m: number;
+  price_per_sqm: number;
+  rental_yield?: number;
+  historical_prices: Array<{
+    period: string; // e.g., "2024-Q1"
+    median_price: number;
+    sales_count: number;
+  }>;
+  property_type_breakdown: Array<{
+    type: string;
+    median_price: number;
+    count: number;
+  }>;
+}
+
 export interface Property {
   id: string;
   beds: number;
@@ -47,15 +117,7 @@ export interface Property {
   sold_price?: number | null;
   sale_date?: string | null;
   comparables_data?: {
-    comparable_sold: Array<{
-      address: string;
-      price: number;
-      beds: number | null;
-      baths: number | null;
-      carpark: number | null;
-      property_type: string;
-      sold_date?: string;
-    }>;
+    comparable_sold: ComparableProperty[];
     statistics: {
       total_found: number;
       sold_count: number;
@@ -66,8 +128,43 @@ export interface Property {
         median: number | null;
       };
     };
+    data_source?: string;
   } | null;
   price_per_sqm?: number | null;
+  // New valuation quality fields
+  valuation_history?: ValuationHistoryEntry[];
+  confidence_scoring?: ConfidenceScoring | null;
+  selected_comparables?: string[]; // IDs of manually selected comparables
+  suburb_trends?: SuburbMarketTrends | null;
+  // Agent productivity fields
+  notes?: PropertyNote[];
+  is_favourite?: boolean;
+  tags?: string[];
+}
+
+// Property note/comment
+export interface PropertyNote {
+  id: string;
+  text: string;
+  created_at: string;
+  created_by: string;
+  type?: 'general' | 'call' | 'meeting' | 'offer' | 'follow_up';
+}
+
+// Property template for quick creation
+export interface PropertyTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  property_type: string;
+  beds: number;
+  baths: number;
+  carpark: number;
+  features?: string;
+  default_agent1_name?: string;
+  default_agent1_phone?: string;
+  is_system?: boolean; // System templates vs user-created
+  created_at: string;
 }
 
 export interface PropertyCreate {

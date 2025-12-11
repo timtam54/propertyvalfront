@@ -78,6 +78,12 @@ export default function PropertyDetailPage() {
 
   // Sold modal states
   const [showSoldModal, setShowSoldModal] = useState(false);
+
+  // Historic sales states
+  const [historicSales, setHistoricSales] = useState<any[]>([]);
+  const [historicSalesLoading, setHistoricSalesLoading] = useState(false);
+  const [historicSalesError, setHistoricSalesError] = useState<string | null>(null);
+  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null; propertyType: string; searchedAt: string | null; cached: boolean } | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [markingSold, setMarkingSold] = useState(false);
@@ -101,6 +107,48 @@ export default function PropertyDetailPage() {
       setLoading(false);
     }
   };
+
+  // Fetch historic sales when property loads
+  const fetchHistoricSales = async () => {
+    setHistoricSalesLoading(true);
+    setHistoricSalesError(null);
+    try {
+      const response = await fetch(`/api/properties/${propertyId}/historic-sales`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to fetch historic sales');
+      }
+      setHistoricSales(data.sales || []);
+      setHistoricSalesInfo({
+        suburb: data.suburb,
+        state: data.state,
+        postcode: data.postcode,
+        propertyType: data.propertyType || 'all',
+        searchedAt: data.searchedAt || null,
+        cached: data.cached || false
+      });
+
+      // Show toast based on whether data was cached or freshly scraped
+      if (data.cached) {
+        toast.info(`Using cached ${data.propertyType} sales data (${data.total} results)`);
+      } else {
+        toast.success(`Fetched ${data.total} ${data.propertyType} sales from Homely.com.au`);
+      }
+    } catch (error: any) {
+      console.error("Error fetching historic sales:", error);
+      setHistoricSalesError(error.message);
+      toast.error("Failed to fetch historic sales");
+    } finally {
+      setHistoricSalesLoading(false);
+    }
+  };
+
+  // Fetch historic sales when property is loaded
+  useEffect(() => {
+    if (property && propertyId) {
+      fetchHistoricSales();
+    }
+  }, [property?.id]);
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this property? This action cannot be undone.")) {
@@ -237,6 +285,23 @@ export default function PropertyDetailPage() {
     }
   };
 
+  // Clear RP Data Report handler
+  const handleClearRpData = async () => {
+    if (!confirm("Are you sure you want to clear the RP Data Report?")) return;
+
+    try {
+      // Use backend's property update endpoint to clear the fields
+      await axios.patch(`${API}/properties/${propertyId}`, {
+        rp_data_report: null,
+        rp_data_upload_date: null
+      });
+      setProperty((prev) => prev ? { ...prev, rp_data_report: null, rp_data_upload_date: null } : null);
+      toast.success("RP Data report cleared!");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to clear report");
+    }
+  };
+
   // Additional Report upload handler
   const handleAdditionalReportUpload = async (data: { type: "pdf" | "text"; file?: File; text?: string }) => {
     setUploadingAdditionalReport(true);
@@ -259,6 +324,22 @@ export default function PropertyDetailPage() {
       toast.error(error.response?.data?.detail || "Failed to add report");
     } finally {
       setUploadingAdditionalReport(false);
+    }
+  };
+
+  // Clear Additional Report handler
+  const handleClearAdditionalReport = async () => {
+    if (!confirm("Are you sure you want to clear the Additional Report?")) return;
+
+    try {
+      // Use backend's property update endpoint to clear the field
+      await axios.patch(`${API}/properties/${propertyId}`, {
+        additional_report: null
+      });
+      setProperty((prev) => prev ? { ...prev, additional_report: null } : null);
+      toast.success("Additional report cleared!");
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to clear report");
     }
   };
 
@@ -509,6 +590,85 @@ export default function PropertyDetailPage() {
           </div>
         )}
 
+        {/* Historic Sales in Area */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span className="text-xl">🏠</span>
+              Historic {property.property_type || ''} Sales
+              {historicSalesInfo && (
+                <span className="text-sm font-normal text-gray-500">
+                  ({historicSalesInfo.suburb}, {historicSalesInfo.state} {historicSalesInfo.postcode})
+                </span>
+              )}
+            </h2>
+            <button
+              onClick={() => fetchHistoricSales()}
+              disabled={historicSalesLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg font-semibold hover:bg-purple-600 transition-colors text-sm disabled:opacity-50"
+            >
+              {historicSalesLoading ? <Loader2 className="animate-spin" size={16} /> : <Home size={16} />}
+              {historicSalesLoading ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            Showing recent {property.property_type?.toLowerCase() || 'property'} sales in this area.
+            {historicSalesInfo?.searchedAt && (
+              <span className="ml-1">
+                Data {historicSalesInfo.cached ? 'cached' : 'fetched'} on {new Date(historicSalesInfo.searchedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.
+              </span>
+            )}
+            <span className="ml-1">Source: Homely.com.au</span>
+          </p>
+
+          <div className="bg-purple-50 rounded-xl p-5 border border-purple-200">
+            {historicSalesLoading ? (
+              <div className="text-center py-8">
+                <Loader2 className="animate-spin mx-auto mb-2" size={32} />
+                <p className="text-purple-700">Loading historic sales from Homely.com.au...</p>
+              </div>
+            ) : historicSalesError ? (
+              <div className="text-center py-4">
+                <p className="text-red-600 font-semibold">Error loading sales data</p>
+                <p className="text-red-500 text-sm">{historicSalesError}</p>
+              </div>
+            ) : historicSales.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="font-semibold text-purple-800 mb-2">No recent sales found</p>
+                <p className="text-purple-700 text-sm">
+                  No sold properties found in this area. Try clicking Refresh to fetch the latest data.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {historicSales.map((sale: any) => (
+                  <div
+                    key={sale.id}
+                    className="bg-white rounded-lg p-4 border border-purple-100 hover:border-purple-300 transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 text-sm">{sale.address}</p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                          {sale.beds && <span className="flex items-center gap-1"><Bed size={12} /> {sale.beds}</span>}
+                          {sale.baths && <span className="flex items-center gap-1"><Bath size={12} /> {sale.baths}</span>}
+                          {sale.cars && <span className="flex items-center gap-1"><Car size={12} /> {sale.cars}</span>}
+                          {sale.land_area && <span className="flex items-center gap-1"><Ruler size={12} /> {sale.land_area} m²</span>}
+                          <span className="text-purple-600">{sale.property_type}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-emerald-600">${sale.price?.toLocaleString()}</p>
+                        <p className="text-xs text-gray-500">{sale.sold_date}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* RP Data Report */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
@@ -516,13 +676,24 @@ export default function PropertyDetailPage() {
               <span className="text-xl">📊</span>
               RP Data Report
             </h2>
-            <button
-              onClick={() => setShowRpDataModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors text-sm"
-            >
-              <DollarSign size={16} />
-              Add RP Data
-            </button>
+            <div className="flex gap-2">
+              {property.rp_data_report && (
+                <button
+                  onClick={handleClearRpData}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
+                >
+                  <Trash2 size={16} />
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={() => setShowRpDataModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors text-sm"
+              >
+                <Upload size={16} />
+                {property.rp_data_report ? 'Update' : 'Add'} RP Data
+              </button>
+            </div>
           </div>
 
           <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
@@ -553,13 +724,24 @@ export default function PropertyDetailPage() {
               <span className="text-xl">📄</span>
               Additional Report
             </h2>
-            <button
-              onClick={() => setShowAdditionalReportModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors text-sm"
-            >
-              <DollarSign size={16} />
-              Add Report
-            </button>
+            <div className="flex gap-2">
+              {property.additional_report && (
+                <button
+                  onClick={handleClearAdditionalReport}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
+                >
+                  <Trash2 size={16} />
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={() => setShowAdditionalReportModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors text-sm"
+              >
+                <Upload size={16} />
+                {property.additional_report ? 'Update' : 'Add'} Report
+              </button>
+            </div>
           </div>
 
           <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
@@ -725,43 +907,73 @@ export default function PropertyDetailPage() {
       {showSoldModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <h2 className="text-xl font-bold text-emerald-600 mb-2">Mark Property as Sold</h2>
-            <p className="text-gray-500 mb-5">Enter the sold price and sale date.</p>
+            <h2 className="text-2xl font-bold text-emerald-500 mb-2 flex items-center gap-2">
+              <span className="text-2xl">💰</span>
+              Mark Property as Sold
+            </h2>
+            <p className="text-gray-500 mb-6">
+              Enter the sold price and sale date. This will add the sale to your property database for future analysis and trends.
+            </p>
 
+            {/* List Price (Original) */}
             <div className="mb-4">
-              <label className="block font-semibold text-gray-700 mb-2">Sold Price *</label>
+              <label className="block font-semibold text-gray-900 mb-2">List Price (Original)</label>
+              <div className="w-full p-3 bg-gray-100 border-2 border-gray-200 rounded-xl text-gray-700 font-medium">
+                ${property?.price?.toLocaleString() || '0'}
+              </div>
+            </div>
+
+            {/* Sold Price */}
+            <div className="mb-4">
+              <label className="block font-semibold text-gray-900 mb-2">Sold Price *</label>
               <input
                 type="number"
-                placeholder="e.g., 480000"
+                placeholder="e.g., 510000"
                 value={soldPrice}
                 onChange={(e) => setSoldPrice(e.target.value)}
-                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+                className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none"
               />
             </div>
 
+            {/* Sale Date */}
             <div className="mb-5">
-              <label className="block font-semibold text-gray-700 mb-2">Sale Date *</label>
+              <label className="block font-semibold text-gray-900 mb-2">Sale Date *</label>
               <input
                 type="date"
                 value={saleDate}
                 onChange={(e) => setSaleDate(e.target.value)}
-                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+                className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none"
               />
             </div>
+
+            {/* Difference from List Price */}
+            {soldPrice && property?.price && parseFloat(soldPrice) > 0 && (
+              <div className="mb-6 p-4 bg-emerald-50 border-2 border-emerald-200 rounded-xl">
+                <div className="text-emerald-600 text-sm font-medium mb-1">Difference from List Price</div>
+                <div className="text-emerald-600 text-2xl font-bold">
+                  {(() => {
+                    const diff = parseFloat(soldPrice) - property.price;
+                    const percentage = ((diff / property.price) * 100).toFixed(1);
+                    const sign = diff >= 0 ? '+' : '';
+                    return `${sign}$${Math.abs(diff).toLocaleString()}(${sign}${percentage}%)`;
+                  })()}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button
                 onClick={() => setShowSoldModal(false)}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleMarkAsSold}
                 disabled={markingSold}
-                className="flex-1 py-3 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50 border-2 border-emerald-600"
               >
-                {markingSold ? "Saving..." : "Mark as Sold"}
+                {markingSold ? "Saving..." : "Mark as Sold & Add to Database"}
               </button>
             </div>
           </div>

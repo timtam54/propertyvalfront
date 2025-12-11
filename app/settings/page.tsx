@@ -319,47 +319,7 @@ export default function SettingsPage() {
 
           {/* API Keys Form */}
           <form onSubmit={handleSaveApiSettings}>
-            {/* Domain API Key */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{
-                display: 'block',
-                fontWeight: '600',
-                color: '#0f172a',
-                marginBottom: '0.25rem'
-              }}>
-                Domain.com.au API Key
-              </label>
-              <p style={{
-                fontSize: '0.875rem',
-                color: '#64748b',
-                marginBottom: '0.5rem'
-              }}>
-                Get your API key from{' '}
-                <a
-                  href="https://developer.domain.com.au/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: '#0ea5e9' }}
-                >
-                  developer.domain.com.au
-                </a>
-              </p>
-              <input
-                type="text"
-                name="domain_api_key"
-                value={apiSettings.domain_api_key || ''}
-                onChange={handleInputChange}
-                placeholder="Enter Domain API key (optional)"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
-                  fontSize: '0.95rem',
-                  background: '#f8fafc'
-                }}
-              />
-            </div>
+            {/* Domain API Key - Now configured via DOMAIN_API_KEY environment variable */}
 
             {/* CoreLogic Client Key */}
             <div style={{ marginBottom: '1.5rem' }}>

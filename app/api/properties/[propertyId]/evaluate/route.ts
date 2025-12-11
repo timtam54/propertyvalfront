@@ -1,522 +1,360 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/mongodb';
 import { getOpenAI } from '@/lib/openai';
-import { Property } from '@/lib/types';
+import { Property, ConfidenceScoring, ValuationHistoryEntry } from '@/lib/types';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-ts-gamma.vercel.app';
 
 interface RouteParams {
   params: Promise<{ propertyId: string }>;
 }
 
+// Sold property from scraping
 interface SoldProperty {
+  id: string;
   address: string;
   price: number;
   beds: number | null;
   baths: number | null;
-  carpark: number | null;
+  cars: number | null;
+  land_area: number | null;
   property_type: string;
-  sold_date?: string;
-  source?: string;
+  sold_date: string;
+  sold_date_raw?: Date | null;
+  source: string;
+  similarity_score?: number;
 }
 
-interface ComparablesData {
-  comparable_sold: SoldProperty[];
-  statistics: {
-    total_found: number;
-    sold_count: number;
-    price_range: {
-      min: number | null;
-      max: number | null;
-      avg: number | null;
-      median: number | null;
-    };
-  };
-}
+// Map property types to Homely filter values (plural form)
+const PROPERTY_TYPE_TO_FILTER: { [key: string]: string } = {
+  'house': 'houses',
+  'unit': 'units',
+  'apartment': 'apartments',
+  'townhouse': 'townhouses',
+  'villa': 'villas',
+  'land': 'land',
+  'acreage': 'acreage',
+  'rural': 'rural',
+  'block of units': 'block-of-units',
+};
 
-const DOMAIN_API_BASE = 'https://api.domain.com.au';
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-ts-gamma.vercel.app';
-
-/**
- * Get API keys from backend-ts server or database settings
- */
-async function getApiKeys(db: any): Promise<{ domain_api_key: string | null }> {
-  // First try to get from environment variable
-  if (process.env.DOMAIN_API_KEY) {
-    console.log('[API Keys] Using DOMAIN_API_KEY from environment');
-    return { domain_api_key: process.env.DOMAIN_API_KEY };
-  }
-
-  // Try to fetch from backend-ts server (where Settings page saves to)
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/api-settings`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success && data.settings?.domain_api_key) {
-        // The key might be masked (contains ****), so we need to get the real one
-        // Try fetching from the internal settings endpoint
-        const internalResponse = await fetch(`${BACKEND_URL}/api/settings/api-keys-internal`, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        });
-
-        if (internalResponse.ok) {
-          const internalData = await internalResponse.json();
-          if (internalData.domain_api_key && !internalData.domain_api_key.includes('****')) {
-            console.log('[API Keys] Got Domain API key from backend-ts internal endpoint');
-            return { domain_api_key: internalData.domain_api_key };
-          }
-        }
-
-        // If internal endpoint doesn't work, the key in settings might be usable if not masked
-        if (!data.settings.domain_api_key.includes('****')) {
-          console.log('[API Keys] Got Domain API key from backend-ts');
-          return { domain_api_key: data.settings.domain_api_key };
-        }
-      }
-    }
-  } catch (e) {
-    console.error('[API Keys] Error fetching from backend-ts:', e);
-  }
-
-  // Fallback to local database
-  try {
-    const settings = await db.collection('settings').findOne({ setting_id: 'api_keys' });
-    if (settings?.domain_api_key) {
-      console.log('[API Keys] Got Domain API key from local database');
-      return { domain_api_key: settings.domain_api_key };
-    }
-  } catch (e) {
-    console.error('[API Keys] Error fetching from local database:', e);
-  }
-
-  console.log('[API Keys] No Domain API key found');
-  return { domain_api_key: null };
+function getPropertyTypeFilter(propertyType: string): string {
+  const normalized = propertyType.toLowerCase().trim();
+  return PROPERTY_TYPE_TO_FILTER[normalized] || normalized.replace(/\s+/g, '-');
 }
 
 /**
- * Extract state from location string
+ * Parse location to extract suburb, state, postcode
  */
-function extractState(location: string): string {
-  const states = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT'];
-  const upperLocation = location.toUpperCase();
-
-  for (const state of states) {
-    if (upperLocation.includes(state)) {
-      return state;
-    }
-  }
-
-  return 'NSW'; // Default
-}
-
-/**
- * Extract suburb from location string
- */
-function extractSuburb(location: string): string {
-  const parts = location.split(',');
-  return parts[0].trim();
-}
-
-/**
- * Search for comparable properties using Domain API
- */
-async function searchDomainProperties(
-  apiKey: string,
-  location: string,
-  beds: number,
-  baths: number,
-  propertyType: string = 'House'
-): Promise<SoldProperty[]> {
-  try {
-    const suburb = extractSuburb(location);
-    const state = extractState(location);
-
-    const headers = {
-      'X-API-Key': apiKey,
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    };
-
-    const url = `${DOMAIN_API_BASE}/v1/listings/residential/_search`;
-
-    // Map property type to Domain format
-    let domainPropertyType = 'House';
-    if (propertyType.toLowerCase().includes('apartment') || propertyType.toLowerCase().includes('unit')) {
-      domainPropertyType = 'ApartmentUnitFlat';
-    } else if (propertyType.toLowerCase().includes('townhouse')) {
-      domainPropertyType = 'Townhouse';
-    }
-
-    const searchBody = {
-      listingType: 'Sale',
-      propertyTypes: [domainPropertyType],
-      minBedrooms: Math.max(1, beds - 1),
-      maxBedrooms: beds + 1,
-      minBathrooms: Math.max(1, baths - 1),
-      maxBathrooms: baths + 1,
-      locations: [
-        {
-          state: state,
-          suburb: suburb,
-          includeSurroundingSuburbs: true
-        }
-      ],
-      pageSize: 20
-    };
-
-    console.log(`[Domain API] Searching for properties in ${suburb}, ${state}`);
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(searchBody),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      console.error(`[Domain API] HTTP error: ${response.status}`);
-      return [];
-    }
-
-    const data = await response.json();
-    const listings = Array.isArray(data) ? data : [];
-    const properties: SoldProperty[] = [];
-
-    for (const listing of listings.slice(0, 15)) {
-      try {
-        const propData: SoldProperty = {
-          address: listing.headline || 'Address not available',
-          price: 0,
-          beds: null,
-          baths: null,
-          carpark: null,
-          property_type: propertyType
-        };
-
-        // Extract price
-        if (listing.priceDetails?.displayPrice) {
-          const priceMatch = listing.priceDetails.displayPrice.match(/\$[\d,]+/);
-          if (priceMatch) {
-            const priceText = priceMatch[0].replace('$', '').replace(/,/g, '');
-            propData.price = parseInt(priceText);
-          }
-        }
-
-        // Extract property features
-        if (listing.propertyDetails) {
-          propData.beds = listing.propertyDetails.bedrooms;
-          propData.baths = listing.propertyDetails.bathrooms;
-          propData.carpark = listing.propertyDetails.carspaces;
-        }
-
-        // Extract sold date if available
-        if (listing.saleDetails?.soldDate) {
-          propData.sold_date = listing.saleDetails.soldDate;
-        } else {
-          propData.sold_date = 'Recently';
-        }
-
-        if (propData.price > 0) {
-          properties.push(propData);
-        }
-      } catch (e) {
-        console.error('[Domain API] Error parsing listing:', e);
-      }
-    }
-
-    console.log(`[Domain API] Found ${properties.length} comparable properties in ${suburb}, ${state}`);
-    return properties;
-
-  } catch (error: any) {
-    console.error('[Domain API] Error searching properties:', error.message);
-    return [];
-  }
-}
-
-/**
- * Parse location to get suburb and state for scraping
- */
-function parseLocationForScraping(location: string): { suburb: string; state: string } {
+function parseLocation(location: string): { suburb: string; state: string; postcode: string | null } {
   const parts = location.split(',').map(p => p.trim());
-  const suburb = parts[0].toLowerCase().replace(/\s+/g, '-');
-  let state = 'qld'; // Default for Queensland properties
+  let suburb = '';
+  let state = 'qld';
+  let postcode: string | null = null;
 
-  if (parts.length > 1) {
-    const statePart = parts[1].toLowerCase();
-    for (const ausState of ['nsw', 'vic', 'qld', 'sa', 'wa', 'tas', 'nt', 'act']) {
-      if (statePart.includes(ausState)) {
-        state = ausState;
-        break;
-      }
+  const postcodeMatch = location.match(/\b(\d{4})\b/);
+  if (postcodeMatch) {
+    postcode = postcodeMatch[1];
+  }
+
+  for (const s of ['nsw', 'vic', 'qld', 'sa', 'wa', 'tas', 'nt', 'act']) {
+    const stateRegex = new RegExp(`\\b${s}\\b`, 'i');
+    if (stateRegex.test(location)) {
+      state = s;
+      break;
     }
   }
 
-  return { suburb, state };
+  if (parts.length >= 2) {
+    let suburbPart = parts[1];
+    suburbPart = suburbPart
+      .replace(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/gi, '')
+      .replace(/\b\d{4}\b/g, '')
+      .trim();
+    suburb = suburbPart.toLowerCase().replace(/\s+/g, '-');
+  } else {
+    suburb = parts[0].toLowerCase().replace(/\s+/g, '-');
+  }
+
+  suburb = suburb.replace(/^\d+\s*-*/, '').replace(/-+$/, '').replace(/^-+/, '');
+
+  return { suburb, state, postcode };
 }
 
 /**
- * Extract price from text string
+ * Scrape sold properties from Homely.com.au (no caching - returns fresh data)
  */
-function extractPriceFromText(priceText: string): number | null {
-  if (!priceText) return null;
+async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<SoldProperty[]> {
+  let url = postcode
+    ? `https://www.homely.com.au/sold-properties/${suburb}-${state}-${postcode}`
+    : `https://www.homely.com.au/sold-properties/${suburb}-${state}`;
 
-  const cleaned = priceText.replace(/[$,\s]/g, '');
-  const match = cleaned.match(/(\d{6,})/);
-  if (match) {
-    return parseInt(match[1]);
+  if (propertyType) {
+    url += `?propertytype=${propertyType}`;
   }
 
-  const millionMatch = priceText.toLowerCase().match(/([\d.]+)\s*m/);
-  if (millionMatch) {
-    return Math.round(parseFloat(millionMatch[1]) * 1000000);
-  }
+  console.log(`[Evaluate] Scraping: ${url}`);
 
-  const thousandMatch = priceText.toLowerCase().match(/([\d.]+)\s*k/);
-  if (thousandMatch) {
-    return Math.round(parseFloat(thousandMatch[1]) * 1000);
-  }
-
-  return null;
-}
-
-/**
- * Scrape sold properties from realestate.com.au as fallback
- */
-async function scrapeRealestateProperties(
-  location: string,
-  beds: number,
-  baths: number,
-  propertyType: string = 'house'
-): Promise<SoldProperty[]> {
   try {
-    const { suburb, state } = parseLocationForScraping(location);
-
-    // Map property type
-    let realestateType = 'house';
-    if (propertyType.toLowerCase().includes('apartment') || propertyType.toLowerCase().includes('unit')) {
-      realestateType = 'unit+apartment';
-    } else if (propertyType.toLowerCase().includes('townhouse')) {
-      realestateType = 'townhouse';
-    }
-
-    const url = `https://www.realestate.com.au/sold/property-${realestateType}-with-${beds}-bedrooms-in-${suburb},+${state}/list-1`;
-
-    console.log(`[Scraper] Fetching sold properties from: ${url}`);
-
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.realestate.com.au/'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'text/html',
       }
     });
 
     if (!response.ok) {
-      console.warn(`[Scraper] Realestate.com.au returned status ${response.status}`);
+      console.log(`[Evaluate] HTTP ${response.status}`);
       return [];
     }
 
     const html = await response.text();
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!nextDataMatch) {
+      return [];
+    }
+
+    const nextData = JSON.parse(nextDataMatch[1]);
+    const listings = nextData?.props?.pageProps?.ssrData?.listings || [];
+    console.log(`[Evaluate] Found ${listings.length} listings`);
+
     const properties: SoldProperty[] = [];
 
-    // Parse JSON-LD structured data
-    const jsonLdMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g);
+    for (const listing of listings) {
+      const priceStr = listing.priceDetails?.longDescription ||
+        listing.saleDetails?.soldDetails?.displayPrice?.longDescription || '';
 
-    if (jsonLdMatches) {
-      for (const match of jsonLdMatches) {
-        try {
-          const jsonStr = match.replace(/<script type="application\/ld\+json">/, '').replace(/<\/script>/, '');
-          const data = JSON.parse(jsonStr);
+      const cleaned = priceStr.replace(/[$,\s]/g, '');
+      const priceMatch = cleaned.match(/(\d{6,})/);
+      const price = priceMatch ? parseInt(priceMatch[1]) : null;
 
-          if (data['@type'] === 'ItemList' && data.itemListElement) {
-            for (const item of data.itemListElement.slice(0, 10)) {
-              if (item.item) {
-                const prop = item.item;
-                const price = extractPriceFromText(prop.offers?.price || '');
+      if (price && price > 100000) {
+        const soldOn = listing.saleDetails?.soldDetails?.soldOn;
+        const soldDateRaw = soldOn ? new Date(soldOn) : null;
+        const soldDate = soldDateRaw
+          ? soldDateRaw.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+          : 'Recently';
 
-                if (price && price > 100000) {
-                  properties.push({
-                    address: prop.address?.streetAddress || prop.name || 'Address not available',
-                    price,
-                    beds: prop.numberOfRooms || beds,
-                    baths: baths,
-                    carpark: null,
-                    property_type: propertyType,
-                    sold_date: 'Recently'
-                  });
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // Continue if JSON parsing fails
-        }
+        const propType = listing.statusLabels?.propertyTypeDescription || 'House';
+        const landArea = listing.features?.landArea || null;
+
+        properties.push({
+          id: crypto.randomUUID(),
+          address: listing.address?.longAddress || listing.address?.streetAddress || 'Unknown',
+          price,
+          beds: listing.features?.bedrooms || null,
+          baths: listing.features?.bathrooms || null,
+          cars: listing.features?.cars || null,
+          land_area: landArea,
+          property_type: propType,
+          sold_date: soldDate,
+          sold_date_raw: soldDateRaw,
+          source: 'homely.com.au'
+        });
       }
     }
 
-    // Fallback regex parsing
-    if (properties.length === 0) {
-      const priceMatches = html.matchAll(/Sold[^$]*\$[\d,]+/gi);
-
-      for (const match of Array.from(priceMatches).slice(0, 10)) {
-        const price = extractPriceFromText(match[0]);
-        if (price && price > 100000) {
-          properties.push({
-            address: `Property in ${suburb.replace(/-/g, ' ')}`,
-            price,
-            beds: beds,
-            baths: baths,
-            carpark: null,
-            property_type: propertyType,
-            sold_date: 'Recently'
-          });
-        }
-      }
-    }
-
-    console.log(`[Scraper] Found ${properties.length} sold properties from Realestate.com.au`);
     return properties;
-
   } catch (error: any) {
-    console.error('[Scraper] Error scraping Realestate.com.au:', error.message);
+    console.log(`[Evaluate] Scrape error: ${error.message}`);
     return [];
   }
 }
 
 /**
- * Get comparable properties with statistics - tries Domain API first, falls back to scraping
+ * Calculate similarity score between target property and comparable
  */
-async function getComparableProperties(
-  apiKey: string | null,
-  location: string,
-  beds: number,
-  baths: number,
-  propertyType: string = 'House'
-): Promise<ComparablesData> {
-  let soldProperties: SoldProperty[] = [];
-  let dataSource = 'AI Knowledge';
+function calculateSimilarity(
+  target: { beds: number; baths: number; land_area?: number | null },
+  comparable: SoldProperty
+): number {
+  let score = 100;
 
-  // Try Domain API first if we have an API key
-  if (apiKey) {
-    console.log('[Evaluate] Trying Domain API...');
-    soldProperties = await searchDomainProperties(apiKey, location, beds, baths, propertyType);
-    if (soldProperties.length > 0) {
-      dataSource = 'Domain.com.au API';
-    }
+  const bedDiff = Math.abs((target.beds || 3) - (comparable.beds || 3));
+  score -= bedDiff * 15;
+
+  const bathDiff = Math.abs((target.baths || 2) - (comparable.baths || 2));
+  score -= bathDiff * 10;
+
+  if (target.land_area && comparable.land_area) {
+    const areaDiffPercent = Math.abs(target.land_area - comparable.land_area) / target.land_area;
+    score -= Math.min(areaDiffPercent * 50, 30);
   }
 
-  // Fall back to web scraping if Domain API failed or returned no results
-  if (soldProperties.length === 0) {
-    console.log('[Evaluate] Domain API returned no results, falling back to web scraping...');
-    soldProperties = await scrapeRealestateProperties(location, beds, baths, propertyType);
-    if (soldProperties.length > 0) {
-      dataSource = 'Realestate.com.au';
-    }
-  }
-
-  const prices = soldProperties.filter(p => p.price > 0).map(p => p.price);
-  const sortedPrices = [...prices].sort((a, b) => a - b);
-  const medianPrice = sortedPrices.length > 0
-    ? sortedPrices[Math.floor(sortedPrices.length / 2)]
-    : null;
-
-  console.log(`[Evaluate] Got ${soldProperties.length} comparable properties from ${dataSource}`);
-
-  return {
-    comparable_sold: soldProperties.map(p => ({ ...p, source: dataSource })),
-    statistics: {
-      total_found: soldProperties.length,
-      sold_count: soldProperties.length,
-      price_range: {
-        min: prices.length > 0 ? Math.min(...prices) : null,
-        max: prices.length > 0 ? Math.max(...prices) : null,
-        avg: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : null,
-        median: medianPrice
-      }
-    },
-    data_source: dataSource
-  } as ComparablesData & { data_source: string };
+  return Math.max(0, score);
 }
 
 /**
- * Format price for display
+ * Find best matching comparable properties
  */
-function formatPrice(price: number | null): string {
-  if (price === null || price === undefined) return 'N/A';
-  return `$${price.toLocaleString()}`;
+function findBestComparables(
+  targetProperty: Property,
+  soldProperties: SoldProperty[],
+  limit: number = 10
+): SoldProperty[] {
+  const target = {
+    beds: targetProperty.beds || 3,
+    baths: targetProperty.baths || 2,
+    land_area: targetProperty.size || null
+  };
+
+  const scored = soldProperties.map(prop => ({
+    ...prop,
+    similarity_score: calculateSimilarity(target, prop)
+  }));
+
+  scored.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
+
+  return scored.slice(0, limit);
 }
 
+/**
+ * Calculate statistics from comparable properties
+ */
+function calculateStatistics(properties: SoldProperty[]) {
+  const prices = properties.map(p => p.price).filter(p => p > 0);
+
+  if (prices.length === 0) {
+    return { min: null, max: null, avg: null, median: null };
+  }
+
+  const sorted = [...prices].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+  return {
+    min: Math.min(...prices),
+    max: Math.max(...prices),
+    avg,
+    median
+  };
+}
+
+/**
+ * Calculate confidence scoring
+ */
+function calculateConfidenceScoring(
+  comparables: SoldProperty[],
+  property: Property
+): ConfidenceScoring {
+  const factors: ConfidenceScoring['factors'] = {
+    comparables_count: { score: 0, weight: 25, description: 'Number of comparables' },
+    data_recency: { score: 80, weight: 20, description: 'Data recency' },
+    location_match: { score: 85, weight: 20, description: 'Location accuracy' },
+    property_similarity: { score: 0, weight: 20, description: 'Property similarity' },
+    price_consistency: { score: 0, weight: 15, description: 'Price consistency' }
+  };
+
+  const recommendations: string[] = [];
+
+  const count = comparables.length;
+  if (count >= 8) factors.comparables_count.score = 100;
+  else if (count >= 5) factors.comparables_count.score = 80;
+  else if (count >= 3) factors.comparables_count.score = 60;
+  else if (count >= 1) factors.comparables_count.score = 40;
+  else {
+    factors.comparables_count.score = 10;
+    recommendations.push('Limited comparable sales data available');
+  }
+
+  if (comparables.length > 0) {
+    const avgSimilarity = comparables.reduce((sum, c) => sum + (c.similarity_score || 0), 0) / comparables.length;
+    factors.property_similarity.score = Math.round(avgSimilarity);
+  }
+
+  const prices = comparables.map(c => c.price);
+  if (prices.length >= 2) {
+    const range = Math.max(...prices) - Math.min(...prices);
+    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const cv = (range / avg) * 100;
+
+    if (cv < 20) factors.price_consistency.score = 95;
+    else if (cv < 40) factors.price_consistency.score = 75;
+    else if (cv < 60) factors.price_consistency.score = 55;
+    else factors.price_consistency.score = 35;
+  }
+
+  let overallScore = 0;
+  let totalWeight = 0;
+  for (const key of Object.keys(factors) as (keyof typeof factors)[]) {
+    overallScore += factors[key].score * factors[key].weight;
+    totalWeight += factors[key].weight;
+  }
+  overallScore = Math.round(overallScore / totalWeight);
+
+  const level: 'high' | 'medium' | 'low' =
+    overallScore >= 70 ? 'high' : overallScore >= 45 ? 'medium' : 'low';
+
+  return { overall_score: overallScore, level, factors, recommendations };
+}
+
+function formatPrice(price: number | null): string {
+  if (!price) return 'N/A';
+  return '$' + price.toLocaleString();
+}
+
+/**
+ * POST - Evaluate property (fetches from backend, no local DB)
+ */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { propertyId } = await params;
-    const db = await getDb();
+    const resolvedParams = await params;
+    const propertyId = resolvedParams.propertyId;
 
-    const property = await db
-      .collection<Property>('properties')
-      .findOne({ id: propertyId }, { projection: { _id: 0 } });
+    // Fetch property from external backend
+    console.log(`[Evaluate] Fetching property ${propertyId} from backend...`);
+    const propertyResponse = await fetch(`${BACKEND_URL}/api/properties/${propertyId}`);
 
-    if (!property) {
+    if (!propertyResponse.ok) {
       return NextResponse.json({ detail: 'Property not found' }, { status: 404 });
     }
 
-    // Get API keys
-    const apiKeys = await getApiKeys(db);
+    const property: Property = await propertyResponse.json();
+    console.log(`[Evaluate] Got property: ${property.location}`);
 
-    // Fetch comparable properties from Domain API
-    let comparablesData: ComparablesData = {
-      comparable_sold: [],
-      statistics: {
-        total_found: 0,
-        sold_count: 0,
-        price_range: { min: null, max: null, avg: null, median: null }
-      }
-    };
+    // Parse location
+    const { suburb, state, postcode } = parseLocation(property.location);
+    const propertyTypeFilter = property.property_type ? getPropertyTypeFilter(property.property_type) : null;
+    console.log(`[Evaluate] Parsed: suburb=${suburb}, state=${state}, postcode=${postcode}, type=${propertyTypeFilter}`);
 
-    if (apiKeys.domain_api_key) {
-      console.log('[Evaluate] Fetching comparable properties from Domain API...');
-      comparablesData = await getComparableProperties(
-        apiKeys.domain_api_key,
-        property.location,
-        property.beds || 3,
-        property.baths || 2,
-        property.property_type || 'House'
-      );
-      console.log(`[Evaluate] Domain API returned ${comparablesData.statistics.total_found} comparable properties`);
-    } else {
-      console.log('[Evaluate] No Domain API key configured - evaluation will be based on AI knowledge only');
-    }
+    // Scrape fresh sold properties from Homely (no caching)
+    const soldProperties = await scrapeHomelyProperties(suburb, state, postcode, propertyTypeFilter);
 
-    // Format comparables for the prompt
+    // Find best comparables
+    const comparables = findBestComparables(property, soldProperties);
+    console.log(`[Evaluate] Found ${comparables.length} comparable properties`);
+
+    // Calculate statistics
+    const stats = calculateStatistics(comparables);
+    const dataSource = comparables.length > 0 ? 'Homely.com.au (live)' : 'AI Knowledge';
+
+    // Build comparables text for AI prompt
     let comparablesText = '';
-    if (comparablesData.comparable_sold.length > 0) {
-      comparablesText = '\n\nRECENT COMPARABLE SALES (from Domain.com.au):\n';
-      for (const comp of comparablesData.comparable_sold.slice(0, 8)) {
-        comparablesText += `- ${comp.address}: ${formatPrice(comp.price)} | ${comp.beds || 'N/A'} bed, ${comp.baths || 'N/A'} bath | ${comp.sold_date || 'Recently'}\n`;
+    if (comparables.length > 0) {
+      comparablesText = `\n\nRECENT COMPARABLE SALES (from ${dataSource}):\n`;
+      for (const comp of comparables.slice(0, 8)) {
+        comparablesText += `- ${comp.address}: ${formatPrice(comp.price)} | ${comp.beds || 'N/A'} bed, ${comp.baths || 'N/A'} bath${comp.land_area ? ' | ' + comp.land_area + ' m²' : ''} | Sold: ${comp.sold_date} | Similarity: ${comp.similarity_score || 0}%\n`;
       }
-
-      const stats = comparablesData.statistics;
-      const range = stats.price_range;
-      comparablesText += `\nMARKET STATISTICS (${stats.total_found} comparable properties):\n`;
-      comparablesText += `- Price Range: ${formatPrice(range.min)} - ${formatPrice(range.max)}\n`;
-      comparablesText += `- Average Price: ${formatPrice(range.avg)}\n`;
-      comparablesText += `- Median Price: ${formatPrice(range.median)}\n`;
+      comparablesText += `\nMARKET STATISTICS (${comparables.length} comparable properties):\n`;
+      comparablesText += `- Price Range: ${formatPrice(stats.min)} - ${formatPrice(stats.max)}\n`;
+      comparablesText += `- Average Price: ${formatPrice(stats.avg)}\n`;
+      comparablesText += `- Median Price: ${formatPrice(stats.median)}\n`;
     }
 
-    // Calculate price per sqm if available
-    let pricePerSqm: number | null = null;
-    if (property.size && comparablesData.statistics.price_range.avg) {
-      pricePerSqm = Math.round(comparablesData.statistics.price_range.avg / property.size);
+    // Build RP Data report section if available
+    let rpDataSection = '';
+    if ((property as any).rp_data_report) {
+      rpDataSection = `\n\nRP DATA PROPERTY REPORT:\n${(property as any).rp_data_report}\n`;
+      console.log(`[Evaluate] Including RP Data report`);
     }
 
+    // Build Additional Report section if available
+    let additionalReportSection = '';
+    if ((property as any).additional_report) {
+      additionalReportSection = `\n\nADDITIONAL PROPERTY REPORT:\n${(property as any).additional_report}\n`;
+      console.log(`[Evaluate] Including Additional report`);
+    }
+
+    // Build AI prompt
     const propertyDesc = `
 Location: ${property.location}
 Property Type: ${property.property_type || 'Residential'}
@@ -524,114 +362,122 @@ Bedrooms: ${property.beds}
 Bathrooms: ${property.baths}
 Car Parks: ${property.carpark}
 Size: ${property.size ? property.size + ' sqm' : 'Not specified'}
-Current List Price: ${property.price ? '$' + property.price.toLocaleString() : 'Not set'}
-Features: ${property.features || 'Standard property'}
-${property.rp_data_report ? '\nRP Data/Market Report:\n' + property.rp_data_report.substring(0, 2000) : ''}
-${comparablesText}
-    `;
+${(property as any).extra_features ? 'Features: ' + (property as any).extra_features : ''}
+${comparablesText}${rpDataSection}${additionalReportSection}`;
 
-    let improvementsDetected = '';
-    if (property.images && property.images.length > 0) {
-      try {
-        const imageAnalysis = await getOpenAI().chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert property appraiser analyzing property photos. Identify visible improvements, renovations, and features that would add value.`
-            },
-            {
-              role: 'user',
-              content: `Based on a ${property.beds} bed, ${property.baths} bath property in ${property.location}, list likely improvements and their estimated value impact. Property type: ${property.property_type || 'House'}.`
-            }
-          ],
-          max_tokens: 500,
-          temperature: 0.7
-        });
-        improvementsDetected = imageAnalysis.choices[0]?.message?.content || '';
-      } catch (imgError) {
-        console.error('Image analysis error:', imgError);
-      }
+    const hasRpData = !!(property as any).rp_data_report;
+    const hasAdditionalReport = !!(property as any).additional_report;
+    const hasComparables = comparables.length > 0;
+
+    let dataSourcesNote = '';
+    if (hasRpData || hasAdditionalReport || hasComparables) {
+      const sources = [];
+      if (hasComparables) sources.push(`${comparables.length} comparable sales`);
+      if (hasRpData) sources.push('RP Data property report');
+      if (hasAdditionalReport) sources.push('additional property report');
+      dataSourcesNote = `\n\nYou have access to: ${sources.join(', ')}. Use ALL available data to inform your valuation.`;
     }
 
-    // Create comprehensive valuation prompt
-    const systemPrompt = `You are an expert Australian property valuer creating a comprehensive valuation report. You have access to REAL comparable sales data from Domain.com.au which you MUST incorporate into your analysis.
-
-Generate a detailed report with these sections:
-
-1. ESTIMATED VALUE (AUD)
-- Market Value: $XXX,XXX (most likely price based on comparable sales data)
-- Range: $XXX,XXX - $XXX,XXX (lower to upper bound)
-- Confidence: High/Medium/Low (based on number and quality of comparables)
-
-2. COMPARABLE ANALYSIS
-- Reference the SPECIFIC comparable sales provided from Domain.com.au
-- Explain how this property compares to recent sales
-- Price per sqm analysis if size data is available
-- Note any adjustments for differences in features, condition, or location
-
-3. VALUE DRIVERS
-- Key factors affecting value (location, features, condition)
-- Market demand factors
-- Any premiums or discounts applicable
-
-4. MARKET POSITION & PRICING STRATEGY
-- Current market conditions
-- Days on market expectations (typically 20-35 days in current market)
-- **PRICING RECOMMENDATION**: Clearly specify if property should be marketed as:
-  * "Offers Over $XXX" (for competitive properties in hot markets)
-  * Fixed price (for standard market conditions)
-  * Price guide/range (for auction campaigns)
-
-5. POSITIONING ADVICE
-- Marketing approach for maximum value
-- Campaign strategy recommendations
-- Key selling points to emphasize
-- Best timeframe for campaign
-
-CRITICAL: Your valuation MUST align with the actual comparable sales data provided. Do not invent prices that don't reflect the market data. If the comparable sales show a median of $X, your valuation should be within a reasonable range of that figure adjusted for property differences.
-
-Use Australian formatting (AUD) and reflect current 2025 market conditions.`;
-
-    const completion = await getOpenAI().chat.completions.create({
+    const openai = getOpenAI();
+    const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: systemPrompt
+          content: `You are an expert Australian property valuer. Analyze the property and provide a professional valuation report.
+
+Based on ALL the data provided (comparable sales, RP Data report, and any additional reports), estimate a fair market value range for this property.${dataSourcesNote}
+
+Format your response as a clear, professional report with:
+1. Property Overview
+2. Market Analysis (using the comparable sales data)
+3. RP Data & Additional Report Insights (if provided - extract key valuation data, land value, improvements value, previous sales, etc.)
+4. Valuation Assessment (synthesizing all available data)
+5. Estimated Value Range (provide specific $ figures based on all available data)
+6. Key Factors Affecting Value
+
+Be specific with dollar amounts. If RP Data or additional reports contain valuation figures, reference and reconcile them with the comparable sales data.`
         },
         {
           role: 'user',
-          content: `Create a comprehensive property valuation report for:\n${propertyDesc}\n\n${improvementsDetected ? 'Detected Improvements:\n' + improvementsDetected : ''}`
+          content: `Please provide a valuation report for this property:\n${propertyDesc}`
         }
       ],
-      max_tokens: 2000,
-      temperature: 0.7
+      temperature: 0.3,
+      max_tokens: 2500
     });
 
-    const evaluationReport = completion.choices[0]?.message?.content || 'Unable to generate evaluation';
+    const evaluationReport = completion.choices[0]?.message?.content || 'Unable to generate evaluation.';
 
-    // Store evaluation with comparables data
-    await db.collection<Property>('properties').updateOne(
-      { id: propertyId },
-      {
-        $set: {
+    // Calculate confidence scoring
+    const confidenceScoring = calculateConfidenceScoring(comparables, property);
+
+    // Prepare valuation history entry
+    const estimatedValue = stats.median || stats.avg || 0;
+    const valueRange = estimatedValue * 0.1;
+    const valuationEntry: ValuationHistoryEntry = {
+      date: new Date().toISOString(),
+      estimated_value: estimatedValue,
+      value_low: Math.round(estimatedValue - valueRange),
+      value_high: Math.round(estimatedValue + valueRange),
+      confidence_score: confidenceScoring.overall_score,
+      confidence_level: confidenceScoring.level,
+      data_source: dataSource,
+      comparables_count: comparables.length,
+      notes: `Based on ${comparables.length} comparable properties in ${suburb.replace(/-/g, ' ')}`
+    };
+
+    // Map comparables to response format
+    const comparablesWithIds = comparables.map(comp => ({
+      id: comp.id,
+      address: comp.address,
+      price: comp.price,
+      beds: comp.beds,
+      baths: comp.baths,
+      carpark: comp.cars,
+      land_area: comp.land_area,
+      property_type: comp.property_type,
+      sold_date: comp.sold_date,
+      source: comp.source,
+      similarity_score: comp.similarity_score || 0,
+      selected: true
+    }));
+
+    const comparablesData = {
+      comparable_sold: comparablesWithIds,
+      statistics: {
+        total_found: comparables.length,
+        sold_count: comparables.length,
+        price_range: stats
+      },
+      data_source: dataSource,
+      domain_api_error: comparables.length === 0 ? `No sold properties found for ${suburb.replace(/-/g, ' ')}, ${state.toUpperCase()}${postcode ? ' ' + postcode : ''}` : null
+    };
+
+    // Save evaluation to backend
+    try {
+      await fetch(`${BACKEND_URL}/api/properties/${propertyId}/save-evaluation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           evaluation_report: evaluationReport,
-          evaluation_date: new Date().toISOString(),
-          improvements_detected: improvementsDetected || null,
           comparables_data: comparablesData,
-          price_per_sqm: pricePerSqm
-        }
-      }
-    );
+          confidence_scoring: confidenceScoring,
+          valuation_entry: valuationEntry
+        })
+      });
+    } catch (saveError) {
+      console.log(`[Evaluate] Could not save to backend: ${saveError}`);
+    }
 
     return NextResponse.json({
       evaluation_report: evaluationReport,
-      improvements_detected: improvementsDetected || null,
       comparables_data: comparablesData,
-      price_per_sqm: pricePerSqm,
+      confidence_scoring: confidenceScoring,
+      valuation_history: [valuationEntry, ...(property.valuation_history || [])].slice(0, 20),
       success: true
     });
+
   } catch (error) {
     console.error('Evaluate property error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

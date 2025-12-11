@@ -6,6 +6,13 @@ import Link from 'next/link';
 import { generateEvaluationPDF } from '@/utils/pdfGenerator';
 import { API } from '@/lib/config';
 import { usePageView } from '@/hooks/useAudit';
+import ValuationQuality from '@/components/ValuationQuality';
+import type {
+  ValuationHistoryEntry,
+  ConfidenceScoring,
+  SuburbMarketTrends,
+  ComparableProperty
+} from '@/lib/types';
 
 interface Property {
   id: string;
@@ -23,6 +30,27 @@ interface Property {
   pricing_type?: string | null;
   price_upper?: number | null;
   marketing_strategy?: string | null;
+  // New valuation quality fields
+  valuation_history?: ValuationHistoryEntry[];
+  confidence_scoring?: ConfidenceScoring | null;
+  suburb_trends?: SuburbMarketTrends | null;
+  comparables_data?: {
+    comparable_sold: ComparableProperty[];
+    statistics: {
+      total_found: number;
+      sold_count: number;
+      price_range: {
+        min: number | null;
+        max: number | null;
+        avg: number | null;
+        median: number | null;
+      };
+    };
+    data_source?: string;
+    domain_api_error?: string | null;
+    domain_api_key_used?: string | null;
+  } | null;
+  selected_comparables?: string[];
 }
 
 interface PricingOption {
@@ -49,15 +77,48 @@ export default function PropertyEvaluationPage() {
   const [isEditingReport, setIsEditingReport] = useState(false);
   const [editedReport, setEditedReport] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Marketing Strategy Modal state
   const [showMarketingModal, setShowMarketingModal] = useState(false);
   const [pricingOptions, setPricingOptions] = useState<PricingOption[]>([]);
   const [marketingStrategyText, setMarketingStrategyText] = useState('');
 
+  // Historic sales state
+  const [historicSales, setHistoricSales] = useState<any[]>([]);
+  const [historicSalesLoading, setHistoricSalesLoading] = useState(false);
+  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null } | null>(null);
+
   useEffect(() => {
     fetchProperty();
   }, [propertyId]);
+
+  // Fetch historic sales when property loads
+  useEffect(() => {
+    if (property && propertyId) {
+      fetchHistoricSales();
+    }
+  }, [property?.id]);
+
+  const fetchHistoricSales = async () => {
+    setHistoricSalesLoading(true);
+    try {
+      const response = await fetch(`/api/properties/${propertyId}/historic-sales`);
+      const data = await response.json();
+      if (response.ok) {
+        setHistoricSales(data.sales || []);
+        setHistoricSalesInfo({
+          suburb: data.suburb,
+          state: data.state,
+          postcode: data.postcode
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching historic sales:", error);
+    } finally {
+      setHistoricSalesLoading(false);
+    }
+  };
 
   const fetchProperty = async () => {
     try {
@@ -73,12 +134,71 @@ export default function PropertyEvaluationPage() {
     }
   };
 
-  const evaluateProperty = async () => {
-    setEvaluating(true);
+  // State for recalculating
+  const [recalculating, setRecalculating] = useState(false);
+  const [selectedComparableIds, setSelectedComparableIds] = useState<string[]>([]);
+
+  // Initialize selected comparables when property loads
+  useEffect(() => {
+    if (property?.selected_comparables) {
+      setSelectedComparableIds(property.selected_comparables);
+    } else if (property?.comparables_data?.comparable_sold) {
+      setSelectedComparableIds(property.comparables_data.comparable_sold.map((c: any) => c.id));
+    }
+  }, [property?.selected_comparables, property?.comparables_data]);
+
+  const handleComparableToggle = (id: string) => {
+    setSelectedComparableIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleRecalculate = async (selectedIds: string[]) => {
+    setRecalculating(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API}/properties/${propertyId}/evaluate`, {
+      const response = await fetch(`${API}/properties/${propertyId}/recalculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selected_comparable_ids: selectedIds }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to recalculate');
+      }
+
+      const data = await response.json();
+      setProperty((prev) =>
+        prev
+          ? {
+              ...prev,
+              evaluation_report: data.evaluation_report,
+              comparables_data: data.comparables_data,
+              confidence_scoring: data.confidence_scoring,
+              valuation_history: data.valuation_history,
+              selected_comparables: selectedIds,
+              evaluation_date: new Date().toISOString(),
+            }
+          : null
+      );
+    } catch (err: any) {
+      console.error('Error recalculating:', err);
+      setError(err.message || 'Failed to recalculate');
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const evaluateProperty = async () => {
+    setEvaluating(true);
+    setError(null);
+    setWarning(null);
+
+    try {
+      // Use local API route for web scraping evaluation
+      const response = await fetch(`/api/properties/${propertyId}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -89,12 +209,23 @@ export default function PropertyEvaluationPage() {
       }
 
       const data = await response.json();
+
+      // Check for data source warning
+      if (data.domain_api_error) {
+        setWarning(data.domain_api_error);
+      }
+
       setProperty((prev) =>
         prev
           ? {
               ...prev,
               evaluation_report: data.evaluation_report,
               improvements_detected: data.improvements_detected,
+              comparables_data: data.comparables_data,
+              confidence_scoring: data.confidence_scoring,
+              valuation_history: data.valuation_history,
+              suburb_trends: data.suburb_trends,
+              selected_comparables: data.comparables_data?.comparable_sold?.map((c: any) => c.id) || [],
               evaluation_date: new Date().toISOString(),
             }
           : null
@@ -618,6 +749,26 @@ export default function PropertyEvaluationPage() {
           </Link>
         </div>
 
+        {/* Warning Message */}
+        {warning && (
+          <div
+            style={{
+              background: '#fffbeb',
+              border: '1px solid #fcd34d',
+              color: '#b45309',
+              padding: '1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+            <span>{warning}</span>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div
@@ -852,6 +1003,134 @@ export default function PropertyEvaluationPage() {
               ) : (
                 <div style={{ color: '#14532d', fontSize: '1rem', whiteSpace: 'pre-wrap', lineHeight: '1.9' }}>
                   {property.evaluation_report}
+                </div>
+              )}
+            </div>
+
+            {/* Data Source Status - BIG CLEAR INDICATOR */}
+            {property.comparables_data && (property.comparables_data.data_source?.includes('Realestate') || property.comparables_data.data_source?.includes('Domain') || property.comparables_data.data_source?.includes('Homely')) && property.comparables_data.statistics?.total_found > 0 ? (
+              <div style={{
+                marginBottom: '1.5rem',
+                padding: '1.5rem',
+                background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
+                border: '3px solid #22c55e',
+                borderRadius: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#15803d', marginBottom: '0.25rem' }}>
+                  {property.comparables_data.data_source}
+                </div>
+                <div style={{ fontSize: '1rem', color: '#166534' }}>
+                  {property.comparables_data.statistics?.total_found || 0} comparable sold properties found
+                </div>
+              </div>
+            ) : null}
+
+            {/* Historic Sales in Area */}
+            <div style={{
+              marginBottom: '1.5rem',
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+              border: '2px solid #a855f7',
+              borderRadius: '12px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#7c3aed', margin: 0 }}>
+                  🏠 Historic Sales in Area
+                  {historicSalesInfo && (
+                    <span style={{ fontWeight: '400', color: '#6b7280', marginLeft: '0.5rem', fontSize: '0.9rem' }}>
+                      ({historicSalesInfo.suburb}, {historicSalesInfo.state} {historicSalesInfo.postcode})
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={fetchHistoricSales}
+                  disabled={historicSalesLoading}
+                  style={{
+                    background: historicSalesLoading ? '#94a3b8' : '#a855f7',
+                    color: 'white',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: historicSalesLoading ? 'not-allowed' : 'pointer',
+                    fontSize: '0.85rem',
+                    fontWeight: '600'
+                  }}
+                >
+                  {historicSalesLoading ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
+
+              {historicSalesLoading ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#7c3aed' }}>
+                  Loading historic sales from database...
+                </div>
+              ) : historicSales.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
+                  No historic sales found. Click Refresh to fetch data.
+                </div>
+              ) : (
+                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {historicSales.slice(0, 15).map((sale: any) => (
+                    <div
+                      key={sale.id}
+                      style={{
+                        background: 'white',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '8px',
+                        marginBottom: '0.5rem',
+                        border: '1px solid #e9d5ff',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '0.9rem' }}>{sale.address}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                          {sale.beds && `${sale.beds} bed`}{sale.baths && ` • ${sale.baths} bath`}{sale.cars && ` • ${sale.cars} car`}
+                          {sale.land_area && ` • ${sale.land_area} m²`}
+                          {sale.property_type && ` • ${sale.property_type}`}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: '700', color: '#059669', fontSize: '0.95rem' }}>
+                          ${sale.price?.toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{sale.sold_date}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#7c3aed', marginTop: '0.5rem' }}>
+                    {historicSales.length} properties from Homely.com.au
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Valuation Quality Section */}
+            <div style={{ marginBottom: '2rem' }}>
+              <ValuationQuality
+                valuationHistory={property.valuation_history}
+                confidenceScoring={property.confidence_scoring}
+                suburbTrends={property.suburb_trends}
+                comparables={property.comparables_data?.comparable_sold}
+                selectedComparables={selectedComparableIds}
+                onComparableToggle={handleComparableToggle}
+                onRecalculate={handleRecalculate}
+                currentValue={property.comparables_data?.statistics?.price_range?.median || undefined}
+              />
+              {recalculating && (
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  background: '#dbeafe',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  color: '#1e40af'
+                }}>
+                  Recalculating valuation with selected comparables...
                 </div>
               )}
             </div>

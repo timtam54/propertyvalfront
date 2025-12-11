@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import Script from "next/script";
 import axios from "axios";
 import { toast } from "sonner";
-import { Home, Bed, Bath, Car, Building, Edit, Trash2, DollarSign, Search, Upload, CheckCircle, Settings, User, FileText, X, LogOut, Menu, MapPin, List, Filter, ChevronDown } from "lucide-react";
+import { Home, Bed, Bath, Car, Building, Edit, Trash2, DollarSign, Search, Upload, CheckCircle, Settings, User, FileText, X, LogOut, Menu, MapPin, List, Filter, ChevronDown, Star, Copy, Download, LayoutTemplate, MessageSquare } from "lucide-react";
 import { API } from "@/lib/config";
 import ReportUploadModal from "@/components/ReportUploadModal";
+import { PropertyQuickActions } from "@/components/PropertyActions";
+import PropertyTemplates from "@/components/PropertyTemplates";
+import BatchExport from "@/components/BatchExport";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { useGoogleAuth } from "@/components/AuthProvider";
 import { usePageView } from "@/hooks/useAudit";
@@ -17,6 +20,14 @@ declare global {
     google: typeof google;
     initGooglePlaces: () => void;
   }
+}
+
+interface PropertyNote {
+  id: string;
+  text: string;
+  created_at: string;
+  created_by: string;
+  type?: 'general' | 'call' | 'meeting' | 'offer' | 'follow_up';
 }
 
 interface Property {
@@ -43,6 +54,10 @@ interface Property {
   rp_data_report?: string;
   additional_report?: string;
   user_email?: string;
+  evaluation_report?: string | null;
+  // New productivity fields
+  is_favourite?: boolean;
+  notes?: PropertyNote[];
 }
 
 interface MarketingPackage {
@@ -134,10 +149,16 @@ export default function HomePage() {
 
   // Poll for Google Maps to be loaded (since Script onLoad has closure issues)
   useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    let timeout: NodeJS.Timeout | null = null;
+
     const checkGoogleMaps = () => {
       if (typeof window !== 'undefined' && window.google?.maps?.places) {
         console.log("Google Maps detected via polling");
         setGoogleLoaded(true);
+        // Clear both interval and timeout when detected
+        if (interval) clearInterval(interval);
+        if (timeout) clearTimeout(timeout);
         return true;
       }
       return false;
@@ -147,20 +168,20 @@ export default function HomePage() {
     if (checkGoogleMaps()) return;
 
     // Poll every 100ms for up to 10 seconds
-    const interval = setInterval(() => {
-      if (checkGoogleMaps()) {
-        clearInterval(interval);
-      }
+    interval = setInterval(() => {
+      checkGoogleMaps();
     }, 100);
 
-    const timeout = setTimeout(() => {
-      clearInterval(interval);
-      console.error("Google Maps failed to load after 10 seconds");
+    timeout = setTimeout(() => {
+      if (interval) clearInterval(interval);
+      if (!window.google?.maps?.places) {
+        console.error("Google Maps failed to load after 10 seconds");
+      }
     }, 10000);
 
     return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+      if (timeout) clearTimeout(timeout);
     };
   }, []);
 
@@ -175,6 +196,10 @@ export default function HomePage() {
   const [additionalReportText, setAdditionalReportText] = useState("");
   const [uploadingRpData, setUploadingRpData] = useState(false);
   const [uploadingAdditionalReport, setUploadingAdditionalReport] = useState(false);
+  // New productivity feature states
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showBatchExport, setShowBatchExport] = useState(false);
+  const [showFavouritesOnly, setShowFavouritesOnly] = useState(false);
 
   const paginatedProperties = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -305,8 +330,13 @@ export default function HomePage() {
   };
 
   // Apply all filters including search
-  const applyFilters = useCallback((searchText: string, currentFilters: typeof filters) => {
+  const applyFilters = useCallback((searchText: string, currentFilters: typeof filters, favouritesOnly: boolean = false) => {
     let filtered = [...allProperties];
+
+    // Favourites filter
+    if (favouritesOnly) {
+      filtered = filtered.filter(prop => prop.is_favourite);
+    }
 
     // Text search
     if (searchText.trim()) {
@@ -348,13 +378,56 @@ export default function HomePage() {
       filtered = filtered.filter(prop => prop.baths >= minBaths);
     }
 
+    // Sort favourites first
+    filtered.sort((a, b) => {
+      if (a.is_favourite && !b.is_favourite) return -1;
+      if (!a.is_favourite && b.is_favourite) return 1;
+      return 0;
+    });
+
     setProperties(filtered);
     setCurrentPage(1);
   }, [allProperties]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    applyFilters(query, filters);
+    applyFilters(query, filters, showFavouritesOnly);
+  };
+
+  const handleFavouritesToggle = () => {
+    const newValue = !showFavouritesOnly;
+    setShowFavouritesOnly(newValue);
+    applyFilters(searchQuery, filters, newValue);
+  };
+
+  const handleFavouriteChange = (propertyId: string, isFavourite: boolean) => {
+    setAllProperties(prev => prev.map(p =>
+      p.id === propertyId ? { ...p, is_favourite: isFavourite } : p
+    ));
+    setProperties(prev => prev.map(p =>
+      p.id === propertyId ? { ...p, is_favourite: isFavourite } : p
+    ));
+  };
+
+  const handleDuplicate = (newProperty: Property) => {
+    setAllProperties(prev => [newProperty, ...prev]);
+    setProperties(prev => [newProperty, ...prev]);
+    toast.success('Property duplicated!');
+  };
+
+  const handleTemplateSelect = (template: any) => {
+    setFormData(prev => ({
+      ...prev,
+      beds: template.beds.toString(),
+      baths: template.baths.toString(),
+      carpark: template.carpark.toString(),
+      property_type: template.property_type,
+      features: template.features || '',
+      agent1_name: template.default_agent1_name || prev.agent1_name,
+      agent1_phone: template.default_agent1_phone || prev.agent1_phone,
+    }));
+    setShowTemplates(false);
+    toast.success(`Template "${template.name}" applied!`);
   };
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
@@ -815,10 +888,11 @@ export default function HomePage() {
                 Database
               </button>
               <button
-                onClick={() => router.push('/settings')}
+                onClick={() => router.push('/admin')}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-200 transition-all whitespace-nowrap"
               >
                 <Settings className="w-4 h-4" />
+                Admin
               </button>
 
               {/* User Avatar & Menu - Desktop */}
@@ -920,11 +994,11 @@ export default function HomePage() {
                 Database
               </button>
               <button
-                onClick={() => { router.push('/settings'); setShowMobileMenu(false); }}
+                onClick={() => { router.push('/admin'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg"
               >
                 <Settings className="w-5 h-5" />
-                Settings
+                Admin
               </button>
             </div>
           )}
@@ -963,9 +1037,9 @@ export default function HomePage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Search Bar and Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 sm:mb-8 p-4">
-          {/* Search Input */}
-          <div className="flex gap-3 items-center">
-            <div className="relative flex-1">
+          {/* Search Input and Quick Actions */}
+          <div className="flex gap-3 items-center flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -975,6 +1049,32 @@ export default function HomePage() {
                 className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
               />
             </div>
+
+            {/* Favourites Toggle */}
+            <button
+              onClick={handleFavouritesToggle}
+              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all ${
+                showFavouritesOnly
+                  ? "bg-amber-500 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              title="Show favourites only"
+            >
+              <Star className={`w-5 h-5 ${showFavouritesOnly ? 'fill-white' : ''}`} />
+              <span className="hidden sm:inline">Starred</span>
+            </button>
+
+            {/* Batch Export */}
+            <button
+              onClick={() => setShowBatchExport(true)}
+              className="flex items-center gap-2 px-4 py-3 rounded-lg font-semibold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all"
+              title="Export multiple PDFs"
+            >
+              <Download className="w-5 h-5" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+
+            {/* Filters Button */}
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all ${
@@ -1106,9 +1206,21 @@ export default function HomePage() {
 
         {/* Property Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 sm:mb-8 p-4 sm:p-6 lg:p-8">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
-            {editingId ? "Edit Property" : "List Your Property"}
-          </h2>
+          <div className="flex items-start justify-between mb-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
+              {editingId ? "Edit Property" : "List Your Property"}
+            </h2>
+            {!editingId && (
+              <button
+                type="button"
+                onClick={() => setShowTemplates(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg font-semibold hover:bg-purple-200 transition-all text-sm"
+              >
+                <LayoutTemplate className="w-4 h-4" />
+                Use Template
+              </button>
+            )}
+          </div>
           <p className="text-gray-500 mb-6 sm:mb-8 text-sm sm:text-base">
             {editingId ? "Update property details" : "Add property details and generate an AI-powered selling pitch"}
           </p>
@@ -1439,10 +1551,16 @@ export default function HomePage() {
                   <FileText size={16} />
                   Additional Report
                 </h2>
-                <button type="button" onClick={() => setShowAdditionalReportModal(true)} style={{ background: '#3b82f6', color: 'white', padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', width: '100%' }}>
-                  <DollarSign size={16} />
-                  Add Report
-                </button>
+                {!additionalReportText ? (
+                  <button type="button" onClick={() => setShowAdditionalReportModal(true)} style={{ background: '#3b82f6', color: 'white', padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', width: '100%' }}>
+                    <DollarSign size={16} />
+                    Add Report
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => setAdditionalReportText('')} style={{ background: '#ef4444', color: 'white', padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}>
+                    Remove
+                  </button>
+                )}
               </div>
 
               <div style={{ background: 'white', padding: '1rem', borderRadius: '8px', textAlign: additionalReportText ? 'left' : 'center' }}>
@@ -1560,17 +1678,35 @@ export default function HomePage() {
                     className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
                     onClick={() => router.push(`/property/${property.id}`)}
                   >
-                    {property.images && property.images.length > 0 ? (
-                      <img
-                        src={property.images[0]}
-                        alt={property.location}
-                        className="w-full h-40 sm:h-56 object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-40 sm:h-56 flex items-center justify-center bg-gray-100">
-                        <Building className="w-12 sm:w-16 h-12 sm:h-16 text-gray-300" />
+                    {/* Image with Favourite Badge */}
+                    <div className="relative">
+                      {property.images && property.images.length > 0 ? (
+                        <img
+                          src={property.images[0]}
+                          alt={property.location}
+                          className="w-full h-40 sm:h-56 object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-40 sm:h-56 flex items-center justify-center bg-gray-100">
+                          <Building className="w-12 sm:w-16 h-12 sm:h-16 text-gray-300" />
+                        </div>
+                      )}
+                      {/* Quick Actions Overlay */}
+                      <div className="absolute top-2 right-2">
+                        <PropertyQuickActions
+                          propertyId={property.id}
+                          isFavourite={property.is_favourite}
+                          notesCount={property.notes?.length || 0}
+                          onFavouriteChange={(isFav) => handleFavouriteChange(property.id, isFav)}
+                        />
                       </div>
-                    )}
+                      {/* Evaluation Badge */}
+                      {property.evaluation_report && (
+                        <div className="absolute bottom-2 left-2 bg-emerald-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                          Evaluated
+                        </div>
+                      )}
+                    </div>
 
                     <div className="p-4 sm:p-6">
                       <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1 sm:mb-2 line-clamp-2">
@@ -1687,6 +1823,23 @@ export default function HomePage() {
         accentColor="blue"
         isUploading={uploadingAdditionalReport}
       />
+
+      {/* Property Templates Modal */}
+      {showTemplates && (
+        <PropertyTemplates
+          onSelect={handleTemplateSelect}
+          onClose={() => setShowTemplates(false)}
+          userEmail={userEmail}
+        />
+      )}
+
+      {/* Batch Export Modal */}
+      {showBatchExport && (
+        <BatchExport
+          properties={properties}
+          onClose={() => setShowBatchExport(false)}
+        />
+      )}
     </div>
   );
 }

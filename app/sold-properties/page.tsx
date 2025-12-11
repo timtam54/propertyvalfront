@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { usePageView } from '@/hooks/useAudit';
+import { API } from '@/lib/config';
 
 interface SoldProperty {
   id: string;
@@ -51,7 +52,7 @@ export default function SoldPropertiesPage() {
 
   const fetchSuburbs = async () => {
     try {
-      const response = await fetch('/api/properties/sold/suburbs');
+      const response = await fetch(`${API}/properties/sold/suburbs`);
       if (response.ok) {
         const data = await response.json();
         setSuburbs(data.suburbs || []);
@@ -65,8 +66,8 @@ export default function SoldPropertiesPage() {
     setLoading(true);
     try {
       const url = selectedSuburb === 'all'
-        ? '/api/properties/sold/list'
-        : `/api/properties/sold/list?suburb=${encodeURIComponent(selectedSuburb)}`;
+        ? `${API}/properties/sold/list`
+        : `${API}/properties/sold/list?suburb=${encodeURIComponent(selectedSuburb)}`;
 
       const response = await fetch(url);
       if (response.ok) {
@@ -102,7 +103,7 @@ export default function SoldPropertiesPage() {
 
   const handleResell = async (propertyId: string) => {
     try {
-      const response = await fetch(`/api/properties/${propertyId}/resell`, {
+      const response = await fetch(`${API}/properties/${propertyId}/resell`, {
         method: 'POST'
       });
 

@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {
+    DOMAIN_API_KEY: process.env.DOMAIN_API_KEY,
+  },
   async headers() {
     return [
       {

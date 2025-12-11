@@ -90,7 +90,7 @@ function parseLocation(location: string): { suburb: string; state: string; postc
  * Scrape sold properties from Homely.com.au (no caching - returns fresh data)
  * Returns both the properties and the URL that was scraped
  */
-async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<{ properties: SoldProperty[], scrapedUrl: string }> {
+async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<{ properties: SoldProperty[], scrapedUrl: string, debug?: string }> {
   let url = postcode
     ? `https://www.homely.com.au/sold-properties/${suburb}-${state}-${postcode}`
     : `https://www.homely.com.au/sold-properties/${suburb}-${state}`;
@@ -104,14 +104,26 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-AU,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"macOS"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
       }
     });
 
     if (!response.ok) {
       console.log(`[Historic Sales] HTTP ${response.status}`);
-      return { properties: [], scrapedUrl: url };
+      return { properties: [], scrapedUrl: url, debug: `HTTP ${response.status}` };
     }
 
     const html = await response.text();
@@ -120,7 +132,10 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!nextDataMatch) {
       console.log('[Historic Sales] No __NEXT_DATA__ found');
-      return { properties: [], scrapedUrl: url };
+      // Return debug info about what we got
+      const preview = html.substring(0, 500);
+      const hasBlockedMessage = html.includes('blocked') || html.includes('captcha') || html.includes('robot');
+      return { properties: [], scrapedUrl: url, debug: `No __NEXT_DATA__. Blocked: ${hasBlockedMessage}. Preview: ${preview}` };
     }
 
     const nextData = JSON.parse(nextDataMatch[1]);
@@ -200,7 +215,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.log(`[Historic Sales] Parsed: suburb=${suburb}, state=${state}, postcode=${postcode}, propertyType=${propertyType}`);
 
     // Scrape fresh data from Homely (no caching)
-    const { properties: scrapedProperties, scrapedUrl } = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
+    const { properties: scrapedProperties, scrapedUrl, debug } = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
     const searchedAt = new Date().toISOString();
 
     // Sort by sold_date_raw descending
@@ -232,7 +247,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       cached: false,
       searchedAt: searchedAt,
       total: sortedProperties.length,
-      scrapedUrl: scrapedUrl
+      scrapedUrl: scrapedUrl,
+      debug: debug || null
     });
 
   } catch (error) {

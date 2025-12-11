@@ -83,7 +83,7 @@ export default function PropertyDetailPage() {
   const [historicSales, setHistoricSales] = useState<any[]>([]);
   const [historicSalesLoading, setHistoricSalesLoading] = useState(false);
   const [historicSalesError, setHistoricSalesError] = useState<string | null>(null);
-  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null; propertyType: string; searchedAt: string | null; cached: boolean; scrapedUrl?: string } | null>(null);
+  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null; propertyType: string; searchedAt: string | null; cached: boolean; scrapedUrl?: string; debug?: string } | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [markingSold, setMarkingSold] = useState(false);
@@ -126,7 +126,8 @@ export default function PropertyDetailPage() {
         propertyType: data.propertyType || 'all',
         searchedAt: data.searchedAt || null,
         cached: data.cached || false,
-        scrapedUrl: data.scrapedUrl || null
+        scrapedUrl: data.scrapedUrl || null,
+        debug: data.debug || null
       });
 
       // Show toast based on whether data was cached or freshly scraped
@@ -642,9 +643,17 @@ export default function PropertyDetailPage() {
             ) : historicSales.length === 0 ? (
               <div className="text-center py-4">
                 <p className="font-semibold text-purple-800 mb-2">No recent sales found</p>
-                <p className="text-purple-700 text-sm">
+                <p className="text-purple-700 text-sm mb-2">
                   No sold properties found in this area. Try clicking Refresh to fetch the latest data.
                 </p>
+                {historicSalesInfo?.debug && (
+                  <details className="text-left mt-3 bg-white rounded-lg p-3 border border-purple-200">
+                    <summary className="cursor-pointer text-sm font-semibold text-purple-700">Debug Info</summary>
+                    <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-all max-h-40 overflow-auto">
+                      {historicSalesInfo.debug}
+                    </pre>
+                  </details>
+                )}
               </div>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">

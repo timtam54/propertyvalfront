@@ -149,11 +149,12 @@ export default function HistoricSalesCard({
     }
   }, [propertyId]);
 
-  const fetchHistoricSales = async () => {
+  const fetchHistoricSales = async (forceFresh: boolean = false) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/properties/${propertyId}/historic-sales`);
+      const url = `/api/properties/${propertyId}/historic-sales${forceFresh ? '?fresh=true' : ''}`;
+      const response = await fetch(url);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.detail || 'Failed to fetch historic sales');
@@ -168,6 +169,7 @@ export default function HistoricSalesCard({
         cached: data.cached || false,
         scrapedUrl: data.scrapedUrl || null,
         debug: data.debug || null,
+        neighbouringSuburb: data.neighbouringSuburb || null,
       });
       setHasFetched(true);
     } catch (err: any) {
@@ -567,9 +569,10 @@ export default function HistoricSalesCard({
             {viewMode === 'map' ? 'Table' : 'Map'}
           </button>
           <button
-            onClick={fetchHistoricSales}
+            onClick={() => fetchHistoricSales(true)}
             disabled={loading}
             className={`flex items-center gap-2 px-4 py-2 ${colors.button} text-white rounded-lg font-semibold transition-colors text-sm disabled:opacity-50`}
+            title="Refresh data from Homely (bypasses cache)"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Home size={16} />}
             {loading ? 'Loading...' : 'Refresh'}

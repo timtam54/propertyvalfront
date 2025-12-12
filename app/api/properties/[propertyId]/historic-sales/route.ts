@@ -336,33 +336,36 @@ async function fetchSuburbSales(
   postcode: string | null,
   propertyType: string | null,
   sourceSuburb: string,
-  isNeighbouring: boolean
+  isNeighbouring: boolean,
+  skipCache: boolean = false
 ): Promise<{ sales: SoldProperty[], scrapedUrl: string, cached: boolean, debug?: string | null }> {
-  // Check cache first
-  const cachedData = await checkCache(suburb, state, postcode, propertyType);
-  if (cachedData) {
-    const cachedSales = (cachedData.sales || []).map((p: any) => ({
-      ...p,
-      source_suburb: sourceSuburb,
-      is_neighbouring: isNeighbouring
-    }));
+  // Check cache first (unless skipCache is true)
+  if (!skipCache) {
+    const cachedData = await checkCache(suburb, state, postcode, propertyType);
+    if (cachedData) {
+      const cachedSales = (cachedData.sales || []).map((p: any) => ({
+        ...p,
+        source_suburb: sourceSuburb,
+        is_neighbouring: isNeighbouring
+      }));
 
-    // Geocode if needed
-    const propertiesToGeocode = cachedSales.filter((p: any) => !p.latitude || !p.longitude);
-    if (propertiesToGeocode.length > 0 && GOOGLE_MAPS_API_KEY) {
-      await Promise.all(
-        propertiesToGeocode.map(async (prop: any) => {
-          const coords = await geocodeAddress(prop.address);
-          if (coords) {
-            prop.latitude = coords.lat;
-            prop.longitude = coords.lng;
-          }
-        })
-      );
-      storeInCache(suburb, state, postcode, propertyType, cachedSales, cachedData.scraped_url);
+      // Geocode if needed
+      const propertiesToGeocode = cachedSales.filter((p: any) => !p.latitude || !p.longitude);
+      if (propertiesToGeocode.length > 0 && GOOGLE_MAPS_API_KEY) {
+        await Promise.all(
+          propertiesToGeocode.map(async (prop: any) => {
+            const coords = await geocodeAddress(prop.address);
+            if (coords) {
+              prop.latitude = coords.lat;
+              prop.longitude = coords.lng;
+            }
+          })
+        );
+        storeInCache(suburb, state, postcode, propertyType, cachedSales, cachedData.scraped_url);
+      }
+
+      return { sales: cachedSales, scrapedUrl: cachedData.scraped_url, cached: true };
     }
-
-    return { sales: cachedSales, scrapedUrl: cachedData.scraped_url, cached: true };
   }
 
   // Scrape fresh data
@@ -401,11 +404,19 @@ async function fetchSuburbSales(
  * GET - Fetch historic sales for a property's area
  * Uses backend cache (7 days) to avoid repeated scraping
  * Also searches neighbouring suburb if configured
+ * Add ?fresh=true to bypass cache and get fresh data
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const resolvedParams = await params;
     const propertyId = resolvedParams.propertyId;
+
+    // Check for fresh parameter to bypass cache
+    const { searchParams } = new URL(request.url);
+    const forceFresh = searchParams.get('fresh') === 'true';
+    if (forceFresh) {
+      console.log(`[Historic Sales] Force fresh requested - bypassing cache`);
+    }
 
     // Fetch property from external backend
     console.log(`[Historic Sales] Fetching property ${propertyId} from backend...`);
@@ -426,7 +437,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     // Fetch main suburb sales
     const mainSuburbName = suburb.replace(/-/g, ' ');
-    const mainResult = await fetchSuburbSales(suburb, state, postcode, propertyType, mainSuburbName, false);
+    const mainResult = await fetchSuburbSales(suburb, state, postcode, propertyType, mainSuburbName, false, forceFresh);
 
     let allSales = [...mainResult.sales];
     let neighbouringInfo: { suburb: string; state: string; postcode: string | null; scrapedUrl: string } | null = null;
@@ -447,7 +458,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         neighbourPostcode,
         propertyType,
         neighbourSuburbDisplay,
-        true
+        true,
+        forceFresh
       );
 
       allSales = [...allSales, ...neighbourResult.sales];

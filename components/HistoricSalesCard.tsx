@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Bed, Bath, Car, Ruler, Home, Loader2, MapPin } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 // Declare google maps types
 declare global {
@@ -172,6 +173,14 @@ export default function HistoricSalesCard({
         neighbouringSuburb: data.neighbouringSuburb || null,
       });
       setHasFetched(true);
+
+      // Show toast with data source info
+      const salesCount = data.sales?.length || 0;
+      if (data.cached) {
+        toast.success(`Loaded ${salesCount} properties from database cache`);
+      } else {
+        toast.success(`Scraped ${salesCount} properties fresh from Homely.com.au`);
+      }
     } catch (err: any) {
       console.error('Error fetching historic sales:', err);
       setError(err.message);

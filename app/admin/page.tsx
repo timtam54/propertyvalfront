@@ -6,7 +6,8 @@ import Link from 'next/link';
 import {
   ArrowLeft, Users, Activity, BarChart3, Clock,
   Globe, FileText, RefreshCw, ChevronDown, ChevronUp,
-  Calendar, Eye, TrendingUp, Settings, Key
+  Calendar, Eye, TrendingUp, Settings, Key, Search,
+  MapPin, Home, ExternalLink, LogIn
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { API } from '@/lib/config';
@@ -75,13 +76,39 @@ interface SoldProperty {
   user_email?: string;
 }
 
+interface CachedSale {
+  id: string;
+  address: string;
+  price: number;
+  beds: number | null;
+  baths: number | null;
+  cars: number | null;
+  land_area: number | null;
+  property_type: string;
+  sold_date: string;
+  source: string;
+}
+
+interface CachedSearch {
+  cache_key: string;
+  suburb: string;
+  state: string;
+  postcode: string | null;
+  property_type: string;
+  cached_at: string;
+  total: number;
+  scraped_url: string;
+  is_valid: boolean;
+  sales: CachedSale[];
+}
+
 export default function AdminPage() {
   const router = useRouter();
 
   // Track page view for audit
   usePageView('admin');
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'activity' | 'settings' | 'reports'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'activity' | 'settings' | 'reports' | 'searches'>('overview');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserStats[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
@@ -100,6 +127,11 @@ export default function AdminPage() {
 
   // Audit loading state
   const [loadingAudit, setLoadingAudit] = useState(false);
+
+  // Cached property searches state
+  const [cachedSearches, setCachedSearches] = useState<CachedSearch[]>([]);
+  const [loadingSearches, setLoadingSearches] = useState(false);
+  const [expandedSearch, setExpandedSearch] = useState<string | null>(null);
 
   // Settings state
   const [savingSettings, setSavingSettings] = useState(false);
@@ -123,6 +155,9 @@ export default function AdminPage() {
     }
     if (activeTab === 'reports') {
       loadSoldProperties();
+    }
+    if (activeTab === 'searches') {
+      loadCachedSearches();
     }
   }, [activeTab, auditPage, userFilter, pageFilter]);
 
@@ -248,6 +283,22 @@ export default function AdminPage() {
     }
   };
 
+  const loadCachedSearches = async () => {
+    setLoadingSearches(true);
+    try {
+      const response = await fetch(`${API}/historic-sales-cache/all`);
+      const data = await response.json();
+
+      if (data.success) {
+        setCachedSearches(data.searches || []);
+      }
+    } catch (error) {
+      console.error('Failed to load cached searches:', error);
+    } finally {
+      setLoadingSearches(false);
+    }
+  };
+
   const formatPrice = (price: number) => {
     if (!price) return 'N/A';
     return `$${price.toLocaleString()}`;
@@ -268,6 +319,24 @@ export default function AdminPage() {
       day: '2-digit',
       month: 'short'
     });
+  };
+
+  const handleLoginAsUser = (user: RegisteredUser) => {
+    // Create a Google-style user object to store in localStorage
+    const impersonatedUser = {
+      email: user.email,
+      name: user.username,
+      picture: user.picture || undefined,
+      sub: user.id // Use user ID as the Google sub
+    };
+
+    // Store in localStorage (same format as GoogleOAuth)
+    localStorage.setItem('googleUser', JSON.stringify(impersonatedUser));
+
+    toast.success(`Logged in as ${user.username}`);
+
+    // Redirect to home page
+    router.push('/');
   };
 
   const getMaxVisits = () => {
@@ -326,6 +395,7 @@ export default function AdminPage() {
                 { id: 'overview', label: 'Overview', icon: BarChart3 },
                 { id: 'users', label: 'Users', icon: Users },
                 { id: 'activity', label: 'Activity Log', icon: Activity },
+                { id: 'searches', label: 'Property Searches', icon: Search },
                 { id: 'settings', label: 'Settings', icon: Settings },
                 { id: 'reports', label: 'Reports', icon: FileText }
               ].map(tab => (
@@ -471,6 +541,7 @@ export default function AdminPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Registered</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Login</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -515,6 +586,16 @@ export default function AdminPage() {
                           }`}>
                             {user.is_active ? 'Active' : 'Inactive'}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => handleLoginAsUser(user)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-lg hover:bg-cyan-100 hover:border-cyan-300 transition-colors"
+                            title={`Login as ${user.username}`}
+                          >
+                            <LogIn className="w-3.5 h-3.5" />
+                            Login as
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -739,6 +820,183 @@ export default function AdminPage() {
                     </div>
                   )}
                 </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Property Searches Tab */}
+        {activeTab === 'searches' && (
+          <div className="space-y-6">
+            {/* Summary Header */}
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500 rounded-lg">
+                    <Search className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Cached Property Searches</h3>
+                    <p className="text-sm text-gray-500">Historic sales data cached from Homely.com.au (7 day TTL)</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-indigo-600">{cachedSearches.length}</p>
+                  <p className="text-sm text-gray-500">Cached Searches</p>
+                </div>
+              </div>
+
+              {/* Stats */}
+              {cachedSearches.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                    <p className="text-xs text-gray-500">Total Properties</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {cachedSearches.reduce((sum, s) => sum + s.total, 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                    <p className="text-xs text-gray-500">Valid Caches</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {cachedSearches.filter(s => s.is_valid).length}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                    <p className="text-xs text-gray-500">Expired Caches</p>
+                    <p className="text-lg font-bold text-orange-600">
+                      {cachedSearches.filter(s => !s.is_valid).length}
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                    <p className="text-xs text-gray-500">Unique Suburbs</p>
+                    <p className="text-lg font-bold text-gray-900">
+                      {new Set(cachedSearches.map(s => `${s.suburb}-${s.state}`)).size}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Searches List */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">All Cached Searches</h3>
+              </div>
+
+              {loadingSearches ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto mb-3"></div>
+                  <p className="text-gray-500">Loading cached searches...</p>
+                </div>
+              ) : cachedSearches.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <Search className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p>No cached searches yet</p>
+                  <p className="text-sm mt-1">Property searches will be cached here when users view historic sales</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {cachedSearches.map(search => (
+                    <div key={search.cache_key} className="hover:bg-gray-50 transition-colors">
+                      <button
+                        onClick={() => setExpandedSearch(expandedSearch === search.cache_key ? null : search.cache_key)}
+                        className="w-full p-4 flex items-center justify-between text-left"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            search.is_valid ? 'bg-green-100' : 'bg-orange-100'
+                          }`}>
+                            <MapPin className={`w-5 h-5 ${search.is_valid ? 'text-green-600' : 'text-orange-600'}`} />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900 capitalize">
+                              {search.suburb.replace(/-/g, ' ')}, {search.state} {search.postcode || ''}
+                            </p>
+                            <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 capitalize">
+                                {search.property_type === 'all' ? 'All Types' : search.property_type}
+                              </span>
+                              <span>{search.total} properties</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                search.is_valid ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                              }`}>
+                                {search.is_valid ? 'Valid' : 'Expired'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right hidden sm:block">
+                            <p className="text-sm text-gray-500">Cached</p>
+                            <p className="text-sm font-medium text-gray-700">{formatDate(search.cached_at)}</p>
+                          </div>
+                          {expandedSearch === search.cache_key ? (
+                            <ChevronUp className="w-5 h-5 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Expanded Property List */}
+                      {expandedSearch === search.cache_key && (
+                        <div className="px-4 pb-4 bg-gray-50">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-medium text-gray-700">
+                              {search.total} properties in this search
+                            </p>
+                            {search.scraped_url && (
+                              <a
+                                href={search.scraped_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-sm text-cyan-600 hover:text-cyan-700"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                View on Homely
+                              </a>
+                            )}
+                          </div>
+
+                          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <table className="w-full">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Address</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Details</th>
+                                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Sold</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200">
+                                {search.sales.slice(0, 20).map((sale, idx) => (
+                                  <tr key={sale.id || idx} className="hover:bg-gray-50">
+                                    <td className="px-3 py-2 text-sm text-gray-900">{sale.address}</td>
+                                    <td className="px-3 py-2 text-sm font-semibold text-emerald-600">
+                                      {formatPrice(sale.price)}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-700 hidden md:table-cell">
+                                      {sale.beds && <span className="mr-2">🛏 {sale.beds}</span>}
+                                      {sale.baths && <span className="mr-2">🛁 {sale.baths}</span>}
+                                      {sale.cars && <span>🚗 {sale.cars}</span>}
+                                      {sale.land_area && <span className="ml-2 text-gray-500">{sale.land_area}m²</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-500 hidden sm:table-cell">{sale.sold_date}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {search.sales.length > 20 && (
+                              <div className="px-3 py-2 bg-gray-50 text-center text-sm text-gray-500">
+                                ... and {search.sales.length - 20} more properties
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

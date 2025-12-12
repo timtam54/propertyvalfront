@@ -218,13 +218,54 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
                     listing.longitude ||
                     null;
 
-        // Build Homely URL from slug and listingId
+        // Build Homely URL from listing data
         // URL format: https://www.homely.com.au/homes/{slug}/{listingId}
-        const slug = listing.slug || listing.urlSlug || listing.address?.slug || null;
-        const listingId = listing.listingId || listing.id || listing.propertyId || null;
-        const homelyUrl = slug && listingId
-          ? `https://www.homely.com.au/homes/${slug}/${listingId}`
-          : null;
+        // Try to get the URL directly first, then try to construct it
+        let homelyUrl: string | null = null;
+
+        // Try direct URL fields
+        const directUrl = listing.url || listing.listingUrl || listing.propertyUrl || listing.link || listing.href || null;
+        if (directUrl && typeof directUrl === 'string') {
+          // If it's a relative URL, make it absolute
+          homelyUrl = directUrl.startsWith('http') ? directUrl : `https://www.homely.com.au${directUrl.startsWith('/') ? '' : '/'}${directUrl}`;
+        }
+
+        // Try to get listing ID from various fields
+        const listingId = listing.listingId || listing.id || listing.propertyId || listing.listing_id || null;
+
+        // If no direct URL, try to construct from slug and ID
+        if (!homelyUrl) {
+          const slug = listing.slug || listing.urlSlug || listing.address?.slug || listing.addressSlug || null;
+          if (slug && listingId) {
+            homelyUrl = `https://www.homely.com.au/homes/${slug}/${listingId}`;
+          }
+        }
+
+        // Last resort: generate slug from address and use listing ID
+        if (!homelyUrl && listingId) {
+          const addressStr = listing.address?.longAddress || listing.address?.streetAddress || '';
+          if (addressStr) {
+            // Convert "6/102 The Strand, North Ward, QLD 4810" to "6-102-the-strand-north-ward-qld-4810"
+            const generatedSlug = addressStr
+              .toLowerCase()
+              .replace(/[\/\\]/g, '-')  // Replace slashes with dashes
+              .replace(/[,.']/g, '')     // Remove punctuation
+              .replace(/\s+/g, '-')      // Replace spaces with dashes
+              .replace(/-+/g, '-')       // Collapse multiple dashes
+              .replace(/^-|-$/g, '');    // Trim dashes from ends
+            if (generatedSlug) {
+              homelyUrl = `https://www.homely.com.au/homes/${generatedSlug}/${listingId}`;
+            }
+          }
+        }
+
+        // Log first listing's keys for debugging (only once)
+        if (properties.length === 0) {
+          console.log(`[Historic Sales] First listing keys:`, Object.keys(listing).join(', '));
+          if (listing.address) {
+            console.log(`[Historic Sales] Address keys:`, Object.keys(listing.address).join(', '));
+          }
+        }
 
         properties.push({
           id: crypto.randomUUID(),

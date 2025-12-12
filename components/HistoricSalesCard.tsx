@@ -534,7 +534,7 @@ export default function HistoricSalesCard({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <h2 className={`text-lg font-bold ${colors.title} flex items-center gap-2`}>
           <span className="text-xl">🏠</span>
-          Historic {propertyType || ''} Sales
+          Historic Property Sales
           {info && (
             <span className="text-sm font-normal text-gray-500">
               ({info.suburb}, {info.state} {info.postcode})

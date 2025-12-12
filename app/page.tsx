@@ -58,6 +58,10 @@ interface Property {
   // New productivity fields
   is_favourite?: boolean;
   notes?: PropertyNote[];
+  // Neighbouring suburb for additional comparables
+  neighbouring_suburb?: string;
+  neighbouring_postcode?: string;
+  neighbouring_state?: string;
 }
 
 interface MarketingPackage {

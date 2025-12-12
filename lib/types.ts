@@ -136,6 +136,13 @@ export interface Property {
   confidence_scoring?: ConfidenceScoring | null;
   selected_comparables?: string[]; // IDs of manually selected comparables
   suburb_trends?: SuburbMarketTrends | null;
+  // Geolocation
+  latitude?: number | null;
+  longitude?: number | null;
+  // Neighbouring suburb for additional comparable sales
+  neighbouring_suburb?: string | null;
+  neighbouring_postcode?: string | null;
+  neighbouring_state?: string | null;
   // Agent productivity fields
   notes?: PropertyNote[];
   is_favourite?: boolean;
@@ -185,6 +192,9 @@ export interface PropertyCreate {
   agent2_phone?: string | null;
   agent_email?: string | null;
   user_email?: string | null;
+  neighbouring_suburb?: string | null;
+  neighbouring_postcode?: string | null;
+  neighbouring_state?: string | null;
 }
 
 // Agent types

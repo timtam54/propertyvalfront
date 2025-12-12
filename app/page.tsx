@@ -143,6 +143,9 @@ export default function HomePage() {
     agent2_name: "",
     agent2_phone: "",
     agent_email: "",
+    neighbouring_suburb: "",
+    neighbouring_postcode: "",
+    neighbouring_state: "",
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [googleLoaded, setGoogleLoaded] = useState(false);
@@ -568,28 +571,34 @@ export default function HomePage() {
     }
 
     try {
-      const loadingToast = toast.loading(`Processing ${files.length} image(s)...`);
-      const newImages: string[] = [];
+      const loadingToast = toast.loading(`Uploading ${files.length} image(s)...`);
 
-      for (const file of files) {
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        newImages.push(base64);
+      // Upload to Azure Blob Storage
+      const formDataUpload = new FormData();
+      files.forEach((file) => formDataUpload.append('files', file));
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
       }
 
+      const { urls } = await response.json();
+
       toast.dismiss(loadingToast);
-      toast.success(`${files.length} image(s) added`);
+      toast.success(`${files.length} image(s) uploaded`);
 
       setFormData((prev) => ({
         ...prev,
-        images: [...prev.images, ...newImages],
+        images: [...prev.images, ...urls],
       }));
     } catch (error) {
-      console.error('Error processing images:', error);
-      toast.error('Failed to process images');
+      console.error('Error uploading images:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload images');
     }
   };
 
@@ -605,6 +614,17 @@ export default function HomePage() {
 
     if (!formData.beds || !formData.baths || !formData.carpark || !formData.location || !formData.property_type) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+
+    // Check payload size before saving (Vercel has 4.5MB limit)
+    // Note: Images are now stored as Azure Blob URLs, so only check report text sizes
+    const estimatedSize = (rpDataText?.length || 0) + (additionalReportText?.length || 0);
+    const maxSize = 4 * 1024 * 1024; // 4MB limit (leaving buffer)
+
+    if (estimatedSize > maxSize) {
+      const sizeMB = (estimatedSize / (1024 * 1024)).toFixed(1);
+      toast.error(`Total data size (${sizeMB}MB) exceeds maximum upload limit of 4MB. Please reduce report sizes.`);
       return;
     }
 
@@ -634,6 +654,9 @@ export default function HomePage() {
         rp_data_report: rpDataText || null,
         additional_report: additionalReportText || null,
         user_email: userEmail || null,
+        neighbouring_suburb: formData.neighbouring_suburb || null,
+        neighbouring_postcode: formData.neighbouring_postcode || null,
+        neighbouring_state: formData.neighbouring_state || null,
       };
 
       if (editingId) {
@@ -665,6 +688,9 @@ export default function HomePage() {
         strata_body_corps: "",
         council_rates: "",
         images: [],
+        neighbouring_suburb: "",
+        neighbouring_postcode: "",
+        neighbouring_state: "",
         ...agentDetails,
       });
 
@@ -700,6 +726,9 @@ export default function HomePage() {
       agent2_name: property.agent2_name || "",
       agent2_phone: property.agent2_phone || "",
       agent_email: property.agent_email || "",
+      neighbouring_suburb: property.neighbouring_suburb || "",
+      neighbouring_postcode: property.neighbouring_postcode || "",
+      neighbouring_state: property.neighbouring_state || "",
     });
     // Load RP Data and Additional Report from property
     setRpDataText(property.rp_data_report || "");
@@ -727,6 +756,9 @@ export default function HomePage() {
       agent2_name: prev.agent2_name,
       agent2_phone: prev.agent2_phone,
       agent_email: prev.agent_email,
+      neighbouring_suburb: "",
+      neighbouring_postcode: "",
+      neighbouring_state: "",
     }));
     // Reset RP Data and Additional Report fields
     setRpDataText("");
@@ -860,13 +892,6 @@ export default function HomePage() {
             {/* Desktop Navigation Buttons - hidden on mobile */}
             <div className="hidden md:flex items-center gap-2">
               <button
-                onClick={() => router.push('/quick-evaluation')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white text-sm font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-sm whitespace-nowrap"
-              >
-                <DollarSign className="w-4 h-4" />
-                Quick Evaluation
-              </button>
-              <button
                 onClick={() => router.push('/portfolio-import')}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-sm whitespace-nowrap"
               >
@@ -879,13 +904,6 @@ export default function HomePage() {
               >
                 <CheckCircle className="w-4 h-4" />
                 Sold
-              </button>
-              <button
-                onClick={() => router.push('/data-management')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-sm font-semibold rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all shadow-sm whitespace-nowrap"
-              >
-                <Building className="w-4 h-4" />
-                Database
               </button>
               <button
                 onClick={() => router.push('/admin')}
@@ -966,13 +984,6 @@ export default function HomePage() {
           {showMobileMenu && (
             <div className="md:hidden border-t border-gray-200 py-3 space-y-2">
               <button
-                onClick={() => { router.push('/quick-evaluation'); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold rounded-lg"
-              >
-                <DollarSign className="w-5 h-5" />
-                Quick Evaluation
-              </button>
-              <button
                 onClick={() => { router.push('/portfolio-import'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg"
               >
@@ -985,13 +996,6 @@ export default function HomePage() {
               >
                 <CheckCircle className="w-5 h-5" />
                 Sold Properties
-              </button>
-              <button
-                onClick={() => { router.push('/data-management'); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white font-semibold rounded-lg"
-              >
-                <Building className="w-5 h-5" />
-                Database
               </button>
               <button
                 onClick={() => { router.push('/admin'); setShowMobileMenu(false); }}
@@ -1385,6 +1389,61 @@ export default function HomePage() {
               {!googleLoaded && (
                 <p className="text-xs text-gray-400 mt-1">Loading address suggestions...</p>
               )}
+            </div>
+
+            {/* Neighbouring Suburb for Additional Comparables */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-3">
+                <MapPin className="w-4 h-4 text-blue-600" />
+                <h4 className="text-sm font-semibold text-blue-800">Neighbouring Suburb (Optional)</h4>
+              </div>
+              <p className="text-xs text-blue-600 mb-3">
+                Add a nearby suburb to include additional comparable sales in the historic property sales analysis.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Suburb</label>
+                  <input
+                    type="text"
+                    name="neighbouring_suburb"
+                    value={formData.neighbouring_suburb}
+                    onChange={handleInputChange}
+                    style={inputStyle}
+                    placeholder="e.g., North Ward"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">Postcode</label>
+                  <input
+                    type="text"
+                    name="neighbouring_postcode"
+                    value={formData.neighbouring_postcode}
+                    onChange={handleInputChange}
+                    style={inputStyle}
+                    placeholder="e.g., 4810"
+                    maxLength={4}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-blue-700 mb-1">State</label>
+                  <select
+                    name="neighbouring_state"
+                    value={formData.neighbouring_state}
+                    onChange={handleInputChange}
+                    style={inputStyle}
+                  >
+                    <option value="">Select state</option>
+                    <option value="QLD">QLD</option>
+                    <option value="NSW">NSW</option>
+                    <option value="VIC">VIC</option>
+                    <option value="SA">SA</option>
+                    <option value="WA">WA</option>
+                    <option value="TAS">TAS</option>
+                    <option value="NT">NT</option>
+                    <option value="ACT">ACT</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Additional Features */}

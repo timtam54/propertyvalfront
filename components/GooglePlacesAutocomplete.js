@@ -58,9 +58,9 @@ const GooglePlacesAutocomplete = ({ value, onChange, onSelect, placeholder, requ
     };
   }, []);
 
-  // Load Google Maps Script
+  // Wait for Google Maps Script (loaded by main page's Script component)
   useEffect(() => {
-    if (!apiKey || scriptLoaded || scriptError) return;
+    if (scriptLoaded || scriptError) return;
 
     // Check if script already exists
     if (window.google && window.google.maps && window.google.maps.places) {
@@ -68,22 +68,28 @@ const GooglePlacesAutocomplete = ({ value, onChange, onSelect, placeholder, requ
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => setScriptLoaded(true);
-    script.onerror = () => {
-      console.error('Failed to load Google Maps script');
-      setScriptError(true);
-    };
-    
-    document.head.appendChild(script);
+    // Poll for Google Maps to be loaded (loaded by page's Script component)
+    const checkInterval = setInterval(() => {
+      if (window.google && window.google.maps && window.google.maps.places) {
+        clearInterval(checkInterval);
+        setScriptLoaded(true);
+      }
+    }, 100);
+
+    // Timeout after 10 seconds
+    const timeout = setTimeout(() => {
+      clearInterval(checkInterval);
+      if (!window.google?.maps?.places) {
+        console.error('Google Maps failed to load after 10 seconds');
+        setScriptError(true);
+      }
+    }, 10000);
 
     return () => {
-      // Cleanup is tricky with Google Maps, so we'll leave the script
+      clearInterval(checkInterval);
+      clearTimeout(timeout);
     };
-  }, [apiKey, scriptLoaded, scriptError]);
+  }, [scriptLoaded, scriptError]);
 
   // Initialize Autocomplete
   useEffect(() => {

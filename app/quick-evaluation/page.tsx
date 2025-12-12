@@ -86,6 +86,26 @@ export default function QuickEvaluationPage() {
       return;
     }
 
+    // Check if a Google Maps script is already loading
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
+    if (existingScript) {
+      // Script exists, poll for it to be ready
+      const checkInterval = setInterval(() => {
+        if (window.google?.maps?.places) {
+          clearInterval(checkInterval);
+          setGoogleLoaded(true);
+        }
+      }, 100);
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        if (window.google?.maps?.places) {
+          setGoogleLoaded(true);
+        }
+      }, 10000);
+      return;
+    }
+
     // Create callback function
     window.initGooglePlaces = () => {
       setGoogleLoaded(true);
@@ -146,32 +166,33 @@ export default function QuickEvaluationPage() {
       return;
     }
 
-    const loadingToast = toast.loading(`Processing ${files.length} image${files.length > 1 ? 's' : ''}...`);
+    const loadingToast = toast.loading(`Uploading ${files.length} image${files.length > 1 ? 's' : ''}...`);
 
     try {
-      const newImages: string[] = [];
+      // Upload to Azure Blob Storage
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append('files', file));
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const reader = new FileReader();
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        newImages.push(dataUrl);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
       }
 
+      const { urls } = await response.json();
+
       toast.dismiss(loadingToast);
-      setUploadedImages([...uploadedImages, ...newImages]);
-      toast.success(`${files.length} image${files.length > 1 ? 's' : ''} added`);
+      setUploadedImages([...uploadedImages, ...urls]);
+      toast.success(`${files.length} image${files.length > 1 ? 's' : ''} uploaded`);
 
     } catch (error) {
-      console.error('Error processing images:', error);
+      console.error('Error uploading images:', error);
       toast.dismiss(loadingToast);
-      toast.error('Failed to process images. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to upload images. Please try again.');
     }
   };
 

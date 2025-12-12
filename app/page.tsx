@@ -568,15 +568,23 @@ export default function HomePage() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+
+    // Reset input immediately so same file can be selected again
+    e.target.value = '';
+
+    if (files.length === 0) {
+      return;
+    }
+
     const totalImages = formData.images.length + files.length;
     if (totalImages > 25) {
       toast.error("Maximum 25 images allowed");
       return;
     }
 
-    try {
-      const loadingToast = toast.loading(`Uploading ${files.length} image(s)...`);
+    const loadingToast = toast.loading(`Uploading ${files.length} image(s)...`);
 
+    try {
       // Upload to Azure Blob Storage
       const formDataUpload = new FormData();
       files.forEach((file) => formDataUpload.append('files', file));
@@ -586,21 +594,21 @@ export default function HomePage() {
         body: formDataUpload,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
-      }
+      const data = await response.json();
 
-      const { urls } = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+      }
 
       toast.dismiss(loadingToast);
       toast.success(`${files.length} image(s) uploaded`);
 
       setFormData((prev) => ({
         ...prev,
-        images: [...prev.images, ...urls],
+        images: [...prev.images, ...data.urls],
       }));
     } catch (error) {
+      toast.dismiss(loadingToast);
       console.error('Error uploading images:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to upload images');
     }
@@ -702,11 +710,11 @@ export default function HomePage() {
       setRpDataText("");
       setAdditionalReportText("");
 
-      fetchProperties();
+      // Fetch updated properties list
+      await fetchProperties();
     } catch (error: any) {
       console.error("Error saving property:", error);
       toast.error(error.response?.data?.detail || "Failed to save property");
-    } finally {
       setLoading(false);
     }
   };

@@ -335,8 +335,8 @@ export default function AdminPage() {
 
     toast.success(`Logged in as ${user.username}`);
 
-    // Redirect to home page
-    router.push('/');
+    // Full page reload to reinitialize AuthProvider with new user
+    window.location.href = '/';
   };
 
   const getMaxVisits = () => {

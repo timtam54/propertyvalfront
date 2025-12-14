@@ -7,6 +7,7 @@ import { generateEvaluationPDF } from '@/utils/pdfGenerator';
 import { API } from '@/lib/config';
 import { usePageView } from '@/hooks/useAudit';
 import ValuationQuality from '@/components/ValuationQuality';
+import HistoricSalesCard from '@/components/HistoricSalesCard';
 import type {
   ValuationHistoryEntry,
   ConfidenceScoring,
@@ -30,12 +31,30 @@ interface Property {
   pricing_type?: string | null;
   price_upper?: number | null;
   marketing_strategy?: string | null;
+  property_type?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   // New valuation quality fields
   valuation_history?: ValuationHistoryEntry[];
   confidence_scoring?: ConfidenceScoring | null;
   suburb_trends?: SuburbMarketTrends | null;
   comparables_data?: {
     comparable_sold: ComparableProperty[];
+    best_match?: {
+      id: string;
+      address: string;
+      price: number;
+      beds: number | null;
+      baths: number | null;
+      carpark: number | null;
+      land_area: number | null;
+      property_type: string;
+      sold_date: string;
+      similarity_score: number;
+      is_exact_match: boolean;
+    } | null;
+    exact_matches_count?: number;
+    valuation_basis?: string;
     statistics: {
       total_found: number;
       sold_count: number;
@@ -45,6 +64,7 @@ interface Property {
         avg: number | null;
         median: number | null;
       };
+      exact_match_avg?: number | null;
     };
     data_source?: string;
     domain_api_error?: string | null;
@@ -84,45 +104,19 @@ export default function PropertyEvaluationPage() {
   const [pricingOptions, setPricingOptions] = useState<PricingOption[]>([]);
   const [marketingStrategyText, setMarketingStrategyText] = useState('');
 
-  // Historic sales state
-  const [historicSales, setHistoricSales] = useState<any[]>([]);
-  const [historicSalesLoading, setHistoricSalesLoading] = useState(false);
-  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null } | null>(null);
-
   useEffect(() => {
     fetchProperty();
   }, [propertyId]);
 
-  // Fetch historic sales when property loads
-  useEffect(() => {
-    if (property && propertyId) {
-      fetchHistoricSales();
-    }
-  }, [property?.id]);
-
-  const fetchHistoricSales = async () => {
-    setHistoricSalesLoading(true);
-    try {
-      const response = await fetch(`/api/properties/${propertyId}/historic-sales`);
-      const data = await response.json();
-      if (response.ok) {
-        setHistoricSales(data.sales || []);
-        setHistoricSalesInfo({
-          suburb: data.suburb,
-          state: data.state,
-          postcode: data.postcode
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching historic sales:", error);
-    } finally {
-      setHistoricSalesLoading(false);
-    }
-  };
-
   const fetchProperty = async () => {
     try {
-      const response = await fetch(`${API}/properties/${propertyId}`);
+      // Add cache-busting timestamp to ensure fresh data
+      const response = await fetch(`${API}/properties/${propertyId}?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       if (!response.ok) throw new Error('Failed to fetch property');
       const data = await response.json();
       setProperty(data);
@@ -215,6 +209,7 @@ export default function PropertyEvaluationPage() {
         setWarning(data.domain_api_error);
       }
 
+      // Update local state immediately with evaluation results
       setProperty((prev) =>
         prev
           ? {
@@ -230,6 +225,25 @@ export default function PropertyEvaluationPage() {
             }
           : null
       );
+
+      // Re-fetch from database to confirm save was successful
+      // Small delay to ensure backend has processed the save
+      setTimeout(async () => {
+        try {
+          const freshResponse = await fetch(`${API}/properties/${propertyId}?_t=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' },
+          });
+          if (freshResponse.ok) {
+            const freshData = await freshResponse.json();
+            setProperty(freshData);
+            console.log('Re-fetched property after evaluation, evaluation_date:', freshData.evaluation_date);
+          }
+        } catch (e) {
+          console.error('Failed to re-fetch after evaluation:', e);
+        }
+      }, 1000);
+
     } catch (err: any) {
       console.error('Error evaluating property:', err);
       setError(err.message || 'Failed to evaluate property');
@@ -238,11 +252,16 @@ export default function PropertyEvaluationPage() {
     }
   };
 
-  const handleExportPDF = () => {
+  const [generatingPDF, setGeneratingPDF] = useState(false);
+
+  const handleExportPDF = async () => {
     if (!property?.evaluation_report) {
       setError('Please evaluate the property first');
       return;
     }
+
+    setGeneratingPDF(true);
+    setError(null);
 
     try {
       // Calculate price per sqm if we have both price and size
@@ -250,19 +269,21 @@ export default function PropertyEvaluationPage() {
         ? Math.round(property.price / property.size)
         : undefined;
 
-      // Generate and download the PDF
-      const filename = generateEvaluationPDF(
+      // Generate and download the PDF (async to fetch images from server)
+      const filename = await generateEvaluationPDF(
         property,
         property.evaluation_report,
-        undefined, // comparablesData - not available on this page
+        property.comparables_data || undefined,
         pricePerSqm
       );
 
-      // Show success message
-      alert(`PDF exported successfully: ${filename}`);
+      // Show success message (filename is returned)
+      console.log('PDF exported:', filename);
     } catch (err) {
       console.error('Error generating PDF:', err);
-      setError('Failed to generate PDF. Please try again.');
+      setError('Failed to generate PDF: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setGeneratingPDF(false);
     }
   };
 
@@ -840,7 +861,7 @@ export default function PropertyEvaluationPage() {
               <div style={{ background: '#f0f9ff', padding: '1.5rem', borderRadius: '12px', border: '2px solid #bae6fd' }}>
                 <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📈</div>
                 <h4 style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#0c4a6e' }}>Market Data</h4>
-                <p style={{ color: '#075985', fontSize: '0.9rem', margin: 0 }}>Compares with Domain.com.au & Realestate.com.au</p>
+                <p style={{ color: '#075985', fontSize: '0.9rem', margin: 0 }}>Compares with Homely.com.au and any property report data pasted in</p>
               </div>
 
               <div style={{ background: '#fef3c7', padding: '1.5rem', borderRadius: '12px', border: '2px solid #fbbf24' }}>
@@ -890,6 +911,52 @@ export default function PropertyEvaluationPage() {
           </div>
         ) : (
           <div>
+            {/* Photo Gallery */}
+            {property.images && property.images.length > 0 && (
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                  padding: '2rem',
+                  borderRadius: '16px',
+                  border: '2px solid #cbd5e1',
+                  marginBottom: '2rem',
+                }}
+              >
+                <h3 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  📸 Property Photos ({property.images.length})
+                </h3>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                    gap: '1rem',
+                  }}
+                >
+                  {property.images.map((img, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        aspectRatio: '4/3',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      }}
+                    >
+                      <img
+                        src={img}
+                        alt={`Property photo ${idx + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Improvements Detected */}
             {property.improvements_detected && (
               <div
@@ -1027,86 +1094,20 @@ export default function PropertyEvaluationPage() {
               </div>
             ) : null}
 
-            {/* Historic Sales in Area */}
-            <div style={{
-              marginBottom: '1.5rem',
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
-              border: '2px solid #a855f7',
-              borderRadius: '12px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#7c3aed', margin: 0 }}>
-                  🏠 Historic Sales in Area
-                  {historicSalesInfo && (
-                    <span style={{ fontWeight: '400', color: '#6b7280', marginLeft: '0.5rem', fontSize: '0.9rem' }}>
-                      ({historicSalesInfo.suburb}, {historicSalesInfo.state} {historicSalesInfo.postcode})
-                    </span>
-                  )}
-                </h3>
-                <button
-                  onClick={fetchHistoricSales}
-                  disabled={historicSalesLoading}
-                  style={{
-                    background: historicSalesLoading ? '#94a3b8' : '#a855f7',
-                    color: 'white',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '8px',
-                    border: 'none',
-                    cursor: historicSalesLoading ? 'not-allowed' : 'pointer',
-                    fontSize: '0.85rem',
-                    fontWeight: '600'
-                  }}
-                >
-                  {historicSalesLoading ? 'Loading...' : 'Refresh'}
-                </button>
-              </div>
-
-              {historicSalesLoading ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: '#7c3aed' }}>
-                  Loading historic sales from database...
-                </div>
-              ) : historicSales.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '1rem', color: '#6b7280' }}>
-                  No historic sales found. Click Refresh to fetch data.
-                </div>
-              ) : (
-                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                  {historicSales.slice(0, 15).map((sale: any) => (
-                    <div
-                      key={sale.id}
-                      style={{
-                        background: 'white',
-                        padding: '0.75rem 1rem',
-                        borderRadius: '8px',
-                        marginBottom: '0.5rem',
-                        border: '1px solid #e9d5ff',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: '600', color: '#1f2937', fontSize: '0.9rem' }}>{sale.address}</div>
-                        <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                          {sale.beds && `${sale.beds} bed`}{sale.baths && ` • ${sale.baths} bath`}{sale.cars && ` • ${sale.cars} car`}
-                          {sale.land_area && ` • ${sale.land_area} m²`}
-                          {sale.property_type && ` • ${sale.property_type}`}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: '700', color: '#059669', fontSize: '0.95rem' }}>
-                          ${sale.price?.toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{sale.sold_date}</div>
-                      </div>
-                    </div>
-                  ))}
-                  <div style={{ textAlign: 'center', fontSize: '0.75rem', color: '#7c3aed', marginTop: '0.5rem' }}>
-                    {historicSales.length} properties from Homely.com.au
-                  </div>
-                </div>
-              )}
+            {/* Historic Sales in Area - PRIMARY SOURCE FOR VALUATION */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <HistoricSalesCard
+                propertyId={propertyId}
+                propertyLocation={property.location}
+                propertyType={property.property_type}
+                propertyBeds={property.beds}
+                propertyBaths={property.baths}
+                propertyLatitude={property.latitude}
+                propertyLongitude={property.longitude}
+                variant="purple"
+                maxItems={15}
+                showSourceLink={true}
+              />
             </div>
 
             {/* Valuation Quality Section */}
@@ -1159,13 +1160,14 @@ export default function PropertyEvaluationPage() {
 
               <button
                 onClick={handleExportPDF}
+                disabled={generatingPDF}
                 style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  background: generatingPDF ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                   color: 'white',
                   padding: '1rem 2rem',
                   borderRadius: '12px',
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: generatingPDF ? 'not-allowed' : 'pointer',
                   fontSize: '1.05rem',
                   fontWeight: '600',
                   display: 'flex',
@@ -1173,7 +1175,7 @@ export default function PropertyEvaluationPage() {
                   gap: '0.5rem',
                 }}
               >
-                📥 Export as PDF
+                📥 {generatingPDF ? 'Generating PDF...' : 'Export as PDF'}
               </button>
 
               <button

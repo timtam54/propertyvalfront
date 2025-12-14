@@ -22,6 +22,53 @@ interface SoldProperty {
   sold_date_raw?: Date | null;
   source: string;
   similarity_score?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_km?: number | null;
+}
+
+/**
+ * Calculate distance between two coordinates using the Haversine formula
+ * Returns distance in kilometers
+ */
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function toRadians(degrees: number): number {
+  return degrees * (Math.PI / 180);
+}
+
+/**
+ * Geocode an address using Google Maps API
+ */
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.status === 'OK' && data.results?.[0]?.geometry?.location) {
+      return {
+        lat: data.results[0].geometry.location.lat,
+        lng: data.results[0].geometry.location.lng
+      };
+    }
+  } catch (error) {
+    console.log(`[Geocode] Failed for: ${address}`);
+  }
+  return null;
 }
 
 // Map property types to Homely filter values (plural form)
@@ -161,7 +208,14 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
           : 'Recently';
 
         const propType = listing.statusLabels?.propertyTypeDescription || 'House';
-        const landArea = listing.features?.landArea || null;
+        // Try multiple possible field names for land area
+        const landArea = listing.features?.landArea ||
+                         listing.features?.landSize ||
+                         listing.features?.land ||
+                         listing.landSize ||
+                         listing.propertyDetails?.landArea ||
+                         listing.propertyDetails?.landSize ||
+                         null;
 
         properties.push({
           id: crypto.randomUUID(),
@@ -187,23 +241,135 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
 }
 
 /**
+ * Detect property density type from address
+ * Returns: 'house' (full block), 'subdivision' (1/X or 2/X - half block), 'unit' (3+/X - shared block)
+ */
+function getPropertyDensityType(address: string, propertyType?: string | null): 'house' | 'subdivision' | 'unit' {
+  if (!address) return 'house';
+
+  const addr = address.trim();
+
+  // Check for X/Y pattern at start of address
+  const slashMatch = addr.match(/^(\d+)\/(\d+)/);
+  if (slashMatch) {
+    const unitNum = parseInt(slashMatch[1]);
+    // 1/X or 2/X = subdivision (duplex, half block)
+    if (unitNum <= 2) return 'subdivision';
+    // 3+/X = unit/townhouse/apartment
+    return 'unit';
+  }
+
+  // Check for "Unit X", "Apt X", "Suite X" patterns
+  if (/^(unit|apt|apartment|suite|flat)\s+\d+/i.test(addr)) {
+    return 'unit';
+  }
+
+  // Check property type
+  if (propertyType) {
+    const pt = propertyType.toLowerCase();
+    if (['unit', 'apartment', 'flat'].some(t => pt.includes(t))) return 'unit';
+    if (['townhouse', 'villa', 'duplex', 'semi'].some(t => pt.includes(t))) return 'subdivision';
+  }
+
+  return 'house';
+}
+
+/**
  * Calculate similarity score between target property and comparable
+ * Heavily penalizes bedroom/bathroom mismatches, property type mismatches, and distance
  */
 function calculateSimilarity(
-  target: { beds: number; baths: number; land_area?: number | null },
+  target: { beds: number; baths: number; land_area?: number | null; address?: string; property_type?: string | null },
   comparable: SoldProperty
 ): number {
   let score = 100;
 
+  // Bedroom difference is the most important factor
   const bedDiff = Math.abs((target.beds || 3) - (comparable.beds || 3));
-  score -= bedDiff * 15;
+  score -= bedDiff * 25;
 
+  // Bathroom difference is also important
   const bathDiff = Math.abs((target.baths || 2) - (comparable.baths || 2));
-  score -= bathDiff * 10;
+  score -= bathDiff * 20;
 
+  // Check property density type mismatch
+  const targetDensity = getPropertyDensityType(target.address || '', target.property_type);
+  const compDensity = getPropertyDensityType(comparable.address, comparable.property_type);
+
+  if (targetDensity !== compDensity) {
+    if (
+      (targetDensity === 'house' && compDensity === 'unit') ||
+      (targetDensity === 'unit' && compDensity === 'house')
+    ) {
+      // Big mismatch: house vs unit - very different land/value
+      score -= 40;
+    } else {
+      // Medium mismatch: house vs subdivision, or subdivision vs unit
+      score -= 20;
+    }
+  }
+
+  // Land area difference (if both have it)
   if (target.land_area && comparable.land_area) {
     const areaDiffPercent = Math.abs(target.land_area - comparable.land_area) / target.land_area;
-    score -= Math.min(areaDiffPercent * 50, 30);
+    score -= Math.min(areaDiffPercent * 50, 20);
+  }
+
+  // Distance penalty - proximity is important!
+  if (comparable.distance_km != null) {
+    if (comparable.distance_km < 0.3) {
+      // Very close (< 300m) - good bonus
+      score = Math.min(100, score + 15);
+    } else if (comparable.distance_km < 0.5) {
+      // Close (300-500m) - bonus
+      score = Math.min(100, score + 10);
+    } else if (comparable.distance_km < 1) {
+      // Near (500m - 1km) - small bonus
+      score = Math.min(100, score + 5);
+    } else if (comparable.distance_km > 10) {
+      // Very far (> 10km) - severe penalty
+      score -= 40;
+    } else if (comparable.distance_km > 5) {
+      // Far (5-10km) - big penalty
+      score -= 25;
+    } else if (comparable.distance_km > 3) {
+      // Moderate (3-5km) - medium penalty
+      score -= 15;
+    } else if (comparable.distance_km > 2) {
+      // Slight distance (2-3km) - small penalty
+      score -= 10;
+    } else if (comparable.distance_km > 1) {
+      // 1-2km - small penalty (not ideal)
+      score -= 5;
+    }
+  }
+
+  // RECENCY penalty - recent sales are much more valuable!
+  if (comparable.sold_date_raw) {
+    const now = new Date();
+    const soldDate = new Date(comparable.sold_date_raw);
+    const monthsAgo = (now.getTime() - soldDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
+
+    if (monthsAgo <= 3) {
+      // Sold within 3 months - bonus
+      score = Math.min(100, score + 10);
+    } else if (monthsAgo <= 6) {
+      // Sold within 6 months - small bonus
+      score = Math.min(100, score + 5);
+    } else if (monthsAgo > 36) {
+      // Sold more than 3 years ago - severe penalty
+      score -= 30;
+    } else if (monthsAgo > 24) {
+      // Sold 2-3 years ago - big penalty
+      score -= 20;
+    } else if (monthsAgo > 18) {
+      // Sold 1.5-2 years ago - medium penalty
+      score -= 15;
+    } else if (monthsAgo > 12) {
+      // Sold 1-1.5 years ago - small penalty
+      score -= 10;
+    }
+    // 6-12 months: no adjustment
   }
 
   return Math.max(0, score);
@@ -211,17 +377,26 @@ function calculateSimilarity(
 
 /**
  * Find best matching comparable properties
+ * Returns both the list of comparables AND the single best match
  */
 function findBestComparables(
   targetProperty: Property,
   soldProperties: SoldProperty[],
   limit: number = 10
-): SoldProperty[] {
+): { comparables: SoldProperty[]; bestMatch: SoldProperty | null; exactMatches: SoldProperty[] } {
+  const targetBeds = targetProperty.beds || 3;
+  const targetBaths = targetProperty.baths || 2;
   const target = {
-    beds: targetProperty.beds || 3,
-    baths: targetProperty.baths || 2,
-    land_area: targetProperty.size || null
+    beds: targetBeds,
+    baths: targetBaths,
+    land_area: targetProperty.size || null,
+    address: targetProperty.location,
+    property_type: targetProperty.property_type
   };
+
+  // Check target density type for logging
+  const targetDensity = getPropertyDensityType(target.address || '', target.property_type);
+  console.log(`[Evaluate] Target density type: ${targetDensity.toUpperCase()} (${target.property_type || 'unknown'}, address: ${target.address})`);
 
   const scored = soldProperties.map(prop => ({
     ...prop,
@@ -230,28 +405,85 @@ function findBestComparables(
 
   scored.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
 
-  return scored.slice(0, limit);
+  // Find exact bed/bath matches - but ALSO must be recent (within 2 years) and reasonably close (within 3km)
+  const now = new Date();
+  const exactMatches = scored.filter(p => {
+    if (p.beds !== targetBeds || p.baths !== targetBaths) return false;
+
+    // Must be within 3km if we have distance data
+    if (p.distance_km != null && p.distance_km > 3) return false;
+
+    // Must be within 2 years if we have date data
+    if (p.sold_date_raw) {
+      const soldDate = new Date(p.sold_date_raw);
+      const monthsAgo = (now.getTime() - soldDate.getTime()) / (1000 * 60 * 60 * 24 * 30);
+      if (monthsAgo > 24) return false;
+    }
+
+    return true;
+  });
+
+  // Best match is the highest similarity score
+  const bestMatch = scored.length > 0 ? scored[0] : null;
+
+  // Log for debugging
+  console.log(`[Evaluate] Target: ${targetBeds} bed, ${targetBaths} bath`);
+  console.log(`[Evaluate] Found ${exactMatches.length} exact matches out of ${scored.length} total`);
+  if (bestMatch) {
+    console.log(`[Evaluate] Best match: ${bestMatch.address} - ${bestMatch.beds} bed, ${bestMatch.baths} bath - $${bestMatch.price} (${bestMatch.similarity_score}% similar)`);
+  }
+
+  return {
+    comparables: scored.slice(0, limit),
+    bestMatch,
+    exactMatches
+  };
 }
 
 /**
  * Calculate statistics from comparable properties
+ * Prioritizes properties with high similarity scores (matching bed/bath)
  */
 function calculateStatistics(properties: SoldProperty[]) {
-  const prices = properties.map(p => p.price).filter(p => p > 0);
+  const validProperties = properties.filter(p => p.price > 0);
 
-  if (prices.length === 0) {
-    return { min: null, max: null, avg: null, median: null };
+  if (validProperties.length === 0) {
+    return { min: null, max: null, avg: null, median: null, weightedAvg: null, bestMatchPrice: null };
   }
 
+  const prices = validProperties.map(p => p.price);
   const sorted = [...prices].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
   const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+
+  // Calculate weighted average based on similarity scores
+  // Properties with higher similarity (matching beds/baths) get more weight
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const prop of validProperties) {
+    const similarity = prop.similarity_score || 50;
+    // Square the similarity to give much more weight to high matches
+    const weight = Math.pow(similarity / 100, 2);
+    weightedSum += prop.price * weight;
+    totalWeight += weight;
+  }
+
+  const weightedAvg = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : avg;
+
+  // Find the best matching property (highest similarity)
+  const bestMatch = validProperties.reduce((best, current) =>
+    (current.similarity_score || 0) > (best.similarity_score || 0) ? current : best
+  );
 
   return {
     min: Math.min(...prices),
     max: Math.max(...prices),
     avg,
-    median
+    median,
+    weightedAvg,
+    bestMatchPrice: bestMatch.price,
+    bestMatchSimilarity: bestMatch.similarity_score || 0
   };
 }
 
@@ -337,17 +569,70 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const property: Property = await propertyResponse.json();
     console.log(`[Evaluate] Got property: ${property.location}`);
 
-    // Parse location
-    const { suburb, state, postcode } = parseLocation(property.location);
-    const propertyTypeFilter = property.property_type ? getPropertyTypeFilter(property.property_type) : null;
-    console.log(`[Evaluate] Parsed: suburb=${suburb}, state=${state}, postcode=${postcode}, type=${propertyTypeFilter}`);
+    // Fetch historic sales from the same endpoint used by the UI
+    // This ensures consistency - the AI sees the same data shown on the page
+    console.log(`[Evaluate] Fetching historic sales for property ${propertyId}...`);
 
-    // Scrape fresh sold properties from Homely (no caching)
-    const soldProperties = await scrapeHomelyProperties(suburb, state, postcode, propertyTypeFilter);
+    let historicSalesData: any = null;
+    try {
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
-    // Find best comparables
-    const comparables = findBestComparables(property, soldProperties);
-    console.log(`[Evaluate] Found ${comparables.length} comparable properties`);
+      const historicSalesResponse = await fetch(`${baseUrl}/api/properties/${propertyId}/historic-sales`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (historicSalesResponse.ok) {
+        historicSalesData = await historicSalesResponse.json();
+        console.log(`[Evaluate] Got ${historicSalesData.sales?.length || 0} historic sales`);
+      } else {
+        console.log(`[Evaluate] Historic sales fetch failed: ${historicSalesResponse.status}`);
+      }
+    } catch (err) {
+      console.log(`[Evaluate] Error fetching historic sales:`, err);
+    }
+
+    // Convert historic sales to our SoldProperty format
+    let soldProperties: SoldProperty[] = [];
+    if (historicSalesData?.sales) {
+      soldProperties = historicSalesData.sales.map((sale: any) => ({
+        id: sale.id || crypto.randomUUID(),
+        address: sale.address,
+        price: sale.price,
+        beds: sale.beds,
+        baths: sale.baths,
+        cars: sale.cars,
+        land_area: sale.land_area,
+        property_type: sale.property_type || 'house',
+        sold_date: sale.sold_date,
+        sold_date_raw: sale.sold_date_raw ? new Date(sale.sold_date_raw) : null,
+        source: sale.source || 'homely.com.au',
+        similarity_score: sale.similarity_score,
+        latitude: sale.latitude,
+        longitude: sale.longitude,
+        distance_km: sale.distance_km,
+      }));
+    }
+
+    console.log(`[Evaluate] Using ${soldProperties.length} historic sales for valuation`);
+
+    // Use the best match from historic sales (already sorted by similarity)
+    const comparables = soldProperties.slice(0, 10);
+    const bestMatch = historicSalesData?.best_match ? {
+      ...historicSalesData.best_match,
+      id: historicSalesData.best_match.id || crypto.randomUUID(),
+    } : (comparables.length > 0 ? comparables[0] : null);
+
+    // Filter exact matches (same beds/baths, recent, nearby)
+    const exactMatches = comparables.filter((p: SoldProperty) =>
+      p.beds === property.beds &&
+      p.baths === property.baths &&
+      (p.distance_km == null || p.distance_km <= 3)
+    );
+
+    console.log(`[Evaluate] Found ${comparables.length} comparable properties, ${exactMatches.length} exact matches`);
 
     // Calculate statistics
     const stats = calculateStatistics(comparables);
@@ -356,14 +641,46 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Build comparables text for AI prompt
     let comparablesText = '';
     if (comparables.length > 0) {
-      comparablesText = `\n\nRECENT COMPARABLE SALES (from ${dataSource}):\n`;
-      for (const comp of comparables.slice(0, 8)) {
-        comparablesText += `- ${comp.address}: ${formatPrice(comp.price)} | ${comp.beds || 'N/A'} bed, ${comp.baths || 'N/A'} bath${comp.land_area ? ' | ' + comp.land_area + ' m²' : ''} | Sold: ${comp.sold_date} | Similarity: ${comp.similarity_score || 0}%\n`;
+      // Sort by similarity for display (highest first)
+      const sortedComps = [...comparables].sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
+
+      // Highlight the BEST MATCH prominently
+      if (bestMatch) {
+        const isExactMatch = bestMatch.beds === property.beds && bestMatch.baths === property.baths;
+        comparablesText = `\n\n🎯 PRIMARY COMPARABLE (${isExactMatch ? 'EXACT MATCH' : 'CLOSEST MATCH'}):\n`;
+        comparablesText += `Address: ${bestMatch.address}\n`;
+        comparablesText += `Specs: ${bestMatch.beds} bed, ${bestMatch.baths} bath${bestMatch.land_area ? ', ' + bestMatch.land_area + ' m²' : ''}\n`;
+        comparablesText += `SOLD PRICE: ${formatPrice(bestMatch.price)}\n`;
+        comparablesText += `Sold Date: ${bestMatch.sold_date}\n`;
+        comparablesText += `Similarity Score: ${bestMatch.similarity_score}%\n`;
+        comparablesText += `\n⚠️ YOUR VALUATION SHOULD BE BASED PRIMARILY ON THIS PROPERTY'S SALE PRICE OF ${formatPrice(bestMatch.price)}\n`;
       }
-      comparablesText += `\nMARKET STATISTICS (${comparables.length} comparable properties):\n`;
+
+      // Show exact matches if we have them
+      if (exactMatches.length > 1) {
+        comparablesText += `\n\n✅ EXACT SPEC MATCHES (${property.beds} bed, ${property.baths} bath):\n`;
+        for (const comp of exactMatches.slice(0, 5)) {
+          comparablesText += `- ${comp.address}: ${formatPrice(comp.price)} | Sold: ${comp.sold_date}\n`;
+        }
+        const exactPrices = exactMatches.map(e => e.price);
+        const exactAvg = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+        comparablesText += `Average of exact matches: ${formatPrice(exactAvg)}\n`;
+      }
+
+      comparablesText += `\n\nOTHER COMPARABLE SALES (from ${dataSource}):\n`;
+      for (const comp of sortedComps.slice(0, 8)) {
+        if (comp.id === bestMatch?.id) continue; // Skip best match, already shown
+        const matchLabel = (comp.similarity_score || 0) >= 85 ? ' [GOOD MATCH]' : '';
+        comparablesText += `- ${comp.address}: ${formatPrice(comp.price)} | ${comp.beds || 'N/A'} bed, ${comp.baths || 'N/A'} bath${comp.land_area ? ' | ' + comp.land_area + ' m²' : ''} | Sold: ${comp.sold_date} | Similarity: ${comp.similarity_score || 0}%${matchLabel}\n`;
+      }
+      comparablesText += `\nMARKET STATISTICS:\n`;
       comparablesText += `- Price Range: ${formatPrice(stats.min)} - ${formatPrice(stats.max)}\n`;
-      comparablesText += `- Average Price: ${formatPrice(stats.avg)}\n`;
-      comparablesText += `- Median Price: ${formatPrice(stats.median)}\n`;
+      comparablesText += `- All Sales Average: ${formatPrice(stats.avg)}\n`;
+      if (exactMatches.length > 0) {
+        const exactPrices = exactMatches.map(e => e.price);
+        const exactAvg = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+        comparablesText += `- Exact Match Average: ${formatPrice(exactAvg)} ⬅️ USE THIS\n`;
+      }
     }
 
     // Build RP Data report section if available
@@ -405,32 +722,80 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
     }
 
     const openai = getOpenAI();
+
+    // Build messages array - include images if available for visual analysis
+    const systemPrompt = `You are an expert Australian property valuer with expertise in assessing property condition and build quality from photos.
+
+Based on ALL the data provided (comparable sales, RP Data report, additional reports, AND property photos if provided), estimate a fair market value range for this property.${dataSourcesNote}
+
+${property.images && property.images.length > 0 ? `
+PHOTO ANALYSIS INSTRUCTIONS:
+You have been provided with ${property.images.length} photo(s) of this property. Carefully analyze them to assess:
+- Build quality and construction standard (budget, standard, premium, luxury)
+- Property condition (poor, fair, good, excellent, renovated)
+- Interior finishes and fixtures quality
+- Kitchen and bathroom quality/age
+- Flooring type and condition
+- Natural light and layout appeal
+- Outdoor areas, landscaping, pool if visible
+- Overall presentation and street appeal
+- Any visible issues or standout features
+
+Use your visual assessment to ADJUST the valuation up or down from comparable sales:
+- Premium finishes/recent renovation: +5-15% above comparable average
+- Good condition, modern: at comparable average
+- Dated but well-maintained: -5-10% below comparable average
+- Poor condition/needs work: -10-20% below comparable average
+` : ''}
+
+Format your response as a clear, professional report with:
+1. Property Overview
+2. ${property.images && property.images.length > 0 ? 'Visual Assessment (detailed analysis of photos - build quality, condition, finishes, presentation)\n3. ' : ''}Market Analysis (using the comparable sales data)
+${property.images && property.images.length > 0 ? '4. ' : '3. '}RP Data & Additional Report Insights (if provided - extract key valuation data, land value, improvements value, previous sales, etc.)
+${property.images && property.images.length > 0 ? '5. ' : '4. '}Valuation Assessment (synthesizing all available data${property.images && property.images.length > 0 ? ' INCLUDING visual condition assessment' : ''})
+${property.images && property.images.length > 0 ? '6. ' : '5. '}Estimated Value Range (provide specific $ figures based on all available data)
+${property.images && property.images.length > 0 ? '7. ' : '6. '}Key Factors Affecting Value
+
+Be specific with dollar amounts. If RP Data or additional reports contain valuation figures, reference and reconcile them with the comparable sales data.${property.images && property.images.length > 0 ? ' IMPORTANTLY: Explain how the visual condition/quality of the property affects your valuation relative to comparables.' : ''}`;
+
+    // Build user message content - text + images if available
+    type MessageContent = string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }>;
+
+    let userContent: MessageContent;
+
+    if (property.images && property.images.length > 0) {
+      // Use vision mode with images
+      const imageContents: Array<{ type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }> = property.images
+        .slice(0, 10) // Limit to 10 images to manage token costs
+        .map(url => ({
+          type: 'image_url' as const,
+          image_url: { url, detail: 'high' as const }
+        }));
+
+      userContent = [
+        { type: 'text' as const, text: `Please provide a valuation report for this property. Analyze the attached photos to assess build quality, condition, and presentation:\n${propertyDesc}` },
+        ...imageContents
+      ];
+      console.log(`[Evaluate] Including ${imageContents.length} images for visual analysis`);
+    } else {
+      userContent = `Please provide a valuation report for this property:\n${propertyDesc}`;
+      console.log(`[Evaluate] No images available for visual analysis`);
+    }
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: `You are an expert Australian property valuer. Analyze the property and provide a professional valuation report.
-
-Based on ALL the data provided (comparable sales, RP Data report, and any additional reports), estimate a fair market value range for this property.${dataSourcesNote}
-
-Format your response as a clear, professional report with:
-1. Property Overview
-2. Market Analysis (using the comparable sales data)
-3. RP Data & Additional Report Insights (if provided - extract key valuation data, land value, improvements value, previous sales, etc.)
-4. Valuation Assessment (synthesizing all available data)
-5. Estimated Value Range (provide specific $ figures based on all available data)
-6. Key Factors Affecting Value
-
-Be specific with dollar amounts. If RP Data or additional reports contain valuation figures, reference and reconcile them with the comparable sales data.`
+          content: systemPrompt
         },
         {
           role: 'user',
-          content: `Please provide a valuation report for this property:\n${propertyDesc}`
+          content: userContent
         }
       ],
       temperature: 0.3,
-      max_tokens: 2500
+      max_tokens: 3500 // Increased for visual analysis content
     });
 
     const evaluationReport = completion.choices[0]?.message?.content || 'Unable to generate evaluation.';
@@ -439,8 +804,30 @@ Be specific with dollar amounts. If RP Data or additional reports contain valuat
     const confidenceScoring = calculateConfidenceScoring(comparables, property);
 
     // Prepare valuation history entry
-    const estimatedValue = stats.median || stats.avg || 0;
+    // PRIORITY: Use exact matches average > best match price > weighted average
+    let estimatedValue: number;
+    let valuationBasis: string;
+
+    if (exactMatches.length > 0) {
+      // Best case: we have exact bed/bath matches - use their average
+      const exactPrices = exactMatches.map(e => e.price);
+      estimatedValue = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+      valuationBasis = `Average of ${exactMatches.length} exact ${property.beds}bed/${property.baths}bath matches`;
+      console.log(`[Evaluate] Using EXACT MATCH average: $${estimatedValue} from ${exactMatches.length} properties`);
+    } else if (bestMatch) {
+      // Next best: use the closest match price
+      estimatedValue = bestMatch.price;
+      valuationBasis = `Best match: ${bestMatch.beds}bed/${bestMatch.baths}bath at ${bestMatch.address}`;
+      console.log(`[Evaluate] Using BEST MATCH price: $${estimatedValue} (${bestMatch.similarity_score}% similar)`);
+    } else {
+      // Fallback to weighted average
+      estimatedValue = stats.weightedAvg || stats.median || stats.avg || 0;
+      valuationBasis = 'Weighted average of available comparables';
+      console.log(`[Evaluate] Using WEIGHTED AVERAGE: $${estimatedValue}`);
+    }
+
     const valueRange = estimatedValue * 0.1;
+    console.log(`[Evaluate] Final valuation: $${estimatedValue} (${valuationBasis})`);
     const valuationEntry: ValuationHistoryEntry = {
       date: new Date().toISOString(),
       estimated_value: estimatedValue,
@@ -450,7 +837,7 @@ Be specific with dollar amounts. If RP Data or additional reports contain valuat
       confidence_level: confidenceScoring.level,
       data_source: dataSource,
       comparables_count: comparables.length,
-      notes: `Based on ${comparables.length} comparable properties in ${suburb.replace(/-/g, ' ')}`
+      notes: valuationBasis
     };
 
     // Map comparables to response format
@@ -466,23 +853,49 @@ Be specific with dollar amounts. If RP Data or additional reports contain valuat
       sold_date: comp.sold_date,
       source: comp.source,
       similarity_score: comp.similarity_score || 0,
+      distance_km: comp.distance_km || null,
       selected: true
     }));
 
+    // Format best match for response
+    const bestMatchData = bestMatch ? {
+      id: bestMatch.id,
+      address: bestMatch.address,
+      price: bestMatch.price,
+      beds: bestMatch.beds,
+      baths: bestMatch.baths,
+      carpark: bestMatch.cars,
+      land_area: bestMatch.land_area,
+      property_type: bestMatch.property_type,
+      sold_date: bestMatch.sold_date,
+      source: bestMatch.source,
+      similarity_score: bestMatch.similarity_score || 0,
+      is_exact_match: bestMatch.beds === property.beds && bestMatch.baths === property.baths
+    } : null;
+
     const comparablesData = {
       comparable_sold: comparablesWithIds,
+      best_match: bestMatchData,
+      exact_matches_count: exactMatches.length,
       statistics: {
         total_found: comparables.length,
         sold_count: comparables.length,
-        price_range: stats
+        price_range: stats,
+        exact_match_avg: exactMatches.length > 0
+          ? Math.round(exactMatches.map(e => e.price).reduce((a, b) => a + b, 0) / exactMatches.length)
+          : null
       },
+      valuation_basis: valuationBasis,
       data_source: dataSource,
-      domain_api_error: comparables.length === 0 ? `No sold properties found for ${suburb.replace(/-/g, ' ')}, ${state.toUpperCase()}${postcode ? ' ' + postcode : ''}` : null
+      domain_api_error: comparables.length === 0 ? `No sold properties found for ${property.location}` : null
     };
 
     // Save evaluation to backend
+    const saveUrl = `${BACKEND_URL}/api/properties/${propertyId}/save-evaluation`;
+    console.log(`[Evaluate] Saving evaluation to: ${saveUrl}`);
+
     try {
-      await fetch(`${BACKEND_URL}/api/properties/${propertyId}/save-evaluation`, {
+      const saveResponse = await fetch(saveUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -492,8 +905,17 @@ Be specific with dollar amounts. If RP Data or additional reports contain valuat
           valuation_entry: valuationEntry
         })
       });
+
+      const saveResult = await saveResponse.text();
+      console.log(`[Evaluate] Save response: ${saveResponse.status} - ${saveResult}`);
+
+      if (!saveResponse.ok) {
+        console.error(`[Evaluate] Failed to save evaluation: ${saveResponse.status} - ${saveResult}`);
+      } else {
+        console.log(`[Evaluate] Evaluation saved successfully for property ${propertyId}`);
+      }
     } catch (saveError) {
-      console.log(`[Evaluate] Could not save to backend: ${saveError}`);
+      console.error(`[Evaluate] Could not save to backend:`, saveError);
     }
 
     return NextResponse.json({

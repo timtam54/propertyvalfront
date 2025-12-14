@@ -11,6 +11,7 @@
   "dependencies": {
     "@azure/msal-browser": "^4.26.2",
     "@azure/msal-react": "^3.0.22",
+    "@azure/storage-blob": "^12.29.1",
     "@react-oauth/google": "^0.12.2",
     "@types/uuid": "^10.0.0",
     "axios": "^1.8.4",

@@ -1,5 +1,47 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
+
+/**
+ * Fetch Azure Blob images via server-side endpoint and convert to base64
+ * @param {string[]} imageUrls - Array of Azure Blob URLs
+ * @returns {Promise<string[]>} - Array of base64 encoded images
+ */
+async function fetchImagesAsBase64(imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) {
+    return [];
+  }
+
+  // Filter to only Azure URLs (not already base64)
+  const azureUrls = imageUrls.filter(url =>
+    url && !url.startsWith('data:') && url.includes('blob.core.windows.net')
+  );
+
+  if (azureUrls.length === 0) {
+    // Return any existing base64 images
+    return imageUrls.filter(img => img && img.startsWith('data:image/'));
+  }
+
+  try {
+    const response = await fetch('/api/images-to-base64', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ urls: azureUrls.slice(0, 3) }), // Limit to 3
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch images:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.images || [];
+  } catch (error) {
+    console.error('Error fetching images as base64:', error);
+    return [];
+  }
+}
 
 /**
  * Generate a professional PDF proposal from property evaluation data
@@ -7,13 +49,14 @@ import 'jspdf-autotable';
  * @param {string} evaluationReport - The evaluation report text
  * @param {Object} comparablesData - Comparables data from web scraping
  * @param {number} pricePerSqm - Price per square meter
+ * @returns {Promise<string>} - The generated filename
  */
-export const generateEvaluationPDF = (property, evaluationReport, comparablesData = null, pricePerSqm = null) => {
+export const generateEvaluationPDF = async (property, evaluationReport, comparablesData = null, pricePerSqm = null) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   let yPosition = 20;
-  
+
   // Helper function to add new page if needed
   const checkPageBreak = (requiredSpace = 20) => {
     if (yPosition + requiredSpace > pageHeight - 20) {
@@ -27,14 +70,14 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
     }
     return false;
   };
-  
+
   // Helper function to add text with word wrap
   const addText = (text, fontSize = 11, color = [0, 0, 0], fontStyle = 'normal') => {
     doc.setFontSize(fontSize);
     doc.setTextColor(...color);
     doc.setFont('helvetica', fontStyle);
     const splitText = doc.splitTextToSize(text, pageWidth - 40);
-    
+
     splitText.forEach(line => {
       checkPageBreak();
       doc.text(line, 20, yPosition);
@@ -42,44 +85,44 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
     });
     yPosition += 5;
   };
-  
+
   // COVER PAGE
   // Header with logo placeholder
   doc.setFillColor(14, 165, 233); // Sky blue
   doc.rect(0, 0, pageWidth, 40, 'F');
-  
+
   doc.setFontSize(28);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.text('PropertyPitch', pageWidth / 2, 25, { align: 'center' });
-  
+
   yPosition = 60;
-  
+
   // Title
   doc.setFontSize(24);
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.text('Property Evaluation Report', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 20;
-  
+
   // Property address
   doc.setFontSize(16);
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'normal');
   doc.text(property.location || 'Property Address', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 30;
-  
+
   // Property summary box
   doc.setFillColor(240, 249, 255);
   doc.roundedRect(20, yPosition, pageWidth - 40, 60, 5, 5, 'F');
-  
+
   yPosition += 15;
   doc.setFontSize(12);
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.text('Property Summary', 30, yPosition);
   yPosition += 10;
-  
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   const summaryLines = [
@@ -88,36 +131,99 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
     property.property_type ? `Type: ${property.property_type}` : '',
     pricePerSqm ? `Price per sqm: $${pricePerSqm.toLocaleString()}/sqm` : ''
   ].filter(Boolean);
-  
+
   summaryLines.forEach(line => {
     doc.text(line, 30, yPosition);
     yPosition += 7;
   });
-  
+
   yPosition += 30;
-  
+
   // Date and report type
   doc.setFontSize(10);
   doc.setTextColor(100, 116, 139);
-  const reportDate = new Date().toLocaleDateString('en-AU', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const reportDate = new Date().toLocaleDateString('en-AU', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
   doc.text(`Report Date: ${reportDate}`, pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 7;
   doc.text('Confidential Market Valuation', pageWidth / 2, yPosition, { align: 'center' });
-  
+
   // Footer on cover page
   doc.setFontSize(9);
   doc.setTextColor(148, 163, 184);
   doc.text('Powered by PropertyPitch AI Valuation System', pageWidth / 2, pageHeight - 20, { align: 'center' });
-  
+
+  // NEW PAGE - Property Images (fetch from Azure via server-side endpoint)
+  const base64Images = await fetchImagesAsBase64(property.images || []);
+
+  if (base64Images.length > 0) {
+    doc.addPage();
+    yPosition = 20;
+
+    // Section header
+    doc.setFillColor(14, 165, 233);
+    doc.rect(0, yPosition - 5, pageWidth, 15, 'F');
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Property Photos', pageWidth / 2, yPosition + 5, { align: 'center' });
+    yPosition += 25;
+
+    // Add images in a grid layout (2 columns), limit to 3
+    const maxImages = 3;
+    const imageWidth = (pageWidth - 50) / 2;
+    const imageHeight = 70;
+    let col = 0;
+    let imagesAdded = 0;
+
+    for (let i = 0; i < Math.min(base64Images.length, maxImages); i++) {
+      const imageData = base64Images[i];
+
+      try {
+        // Calculate position
+        const xPos = 20 + col * (imageWidth + 10);
+
+        // Check if we need a new page
+        if (yPosition + imageHeight > pageHeight - 30) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        // Add the image
+        const imageType = imageData.includes('png') ? 'PNG' : 'JPEG';
+        doc.addImage(imageData, imageType, xPos, yPosition, imageWidth, imageHeight, undefined, 'MEDIUM');
+
+        imagesAdded++;
+        col++;
+
+        // Move to next row after 2 images
+        if (col >= 2) {
+          col = 0;
+          yPosition += imageHeight + 10;
+        }
+      } catch (error) {
+        console.log('Error adding image to PDF:', error);
+      }
+    }
+
+    // Add note about total images if there are more
+    const totalImages = (property.images || []).length;
+    if (totalImages > maxImages && imagesAdded > 0) {
+      yPosition += col > 0 ? imageHeight + 15 : 10;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Showing ${imagesAdded} of ${totalImages} photos`, pageWidth / 2, yPosition, { align: 'center' });
+    }
+  }
+
   // NEW PAGE - Market Comparables (if available)
   if (comparablesData && comparablesData.statistics && comparablesData.statistics.total_found > 0) {
     doc.addPage();
     yPosition = 20;
-    
+
     // Section header
     doc.setFillColor(14, 165, 233);
     doc.rect(0, yPosition - 5, pageWidth, 15, 'F');
@@ -126,7 +232,7 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
     doc.setFont('helvetica', 'bold');
     doc.text('Market Comparables Data', pageWidth / 2, yPosition + 5, { align: 'center' });
     yPosition += 25;
-    
+
     // Statistics
     const stats = comparablesData.statistics;
     if (stats.total_found > 0) {
@@ -135,11 +241,11 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
       doc.setFont('helvetica', 'bold');
       doc.text(`Market Statistics (${stats.total_found} comparable properties)`, 20, yPosition);
       yPosition += 10;
-      
+
       doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(51, 65, 85);
-      
+
       const statsData = [
         ['Price Range', `$${stats.price_range?.min?.toLocaleString() || 0} - $${stats.price_range?.max?.toLocaleString() || 0}`],
         ['Average Price', `$${stats.price_range?.avg?.toLocaleString() || 0}`],
@@ -147,7 +253,7 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
         ['Average Sold Price', `$${stats.sold_avg?.toLocaleString() || 0} (${stats.sold_count || 0} sales)`],
         ['Average Listing Price', `$${stats.listing_avg?.toLocaleString() || 0} (${stats.listing_count || 0} listings)`]
       ];
-      
+
       statsData.forEach(([label, value]) => {
         doc.text(`${label}:`, 25, yPosition);
         doc.setFont('helvetica', 'bold');
@@ -157,7 +263,7 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
       });
       yPosition += 10;
     }
-    
+
     // Recently Sold Properties Table
     if (comparablesData.comparable_sold && comparablesData.comparable_sold.length > 0) {
       checkPageBreak(40);
@@ -166,15 +272,15 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
       doc.setTextColor(15, 23, 42);
       doc.text('Recently Sold Properties (Domain.com.au)', 20, yPosition);
       yPosition += 5;
-      
+
       const soldData = comparablesData.comparable_sold.slice(0, 5).map(comp => [
         comp.address,
         `$${comp.price.toLocaleString()}`,
         `${comp.beds || 'N/A'} bed, ${comp.baths || 'N/A'} bath`,
         comp.sold_date || 'Recently'
       ]);
-      
-      doc.autoTable({
+
+      autoTable(doc, {
         startY: yPosition,
         head: [['Address', 'Price', 'Features', 'Sold']],
         body: soldData,
@@ -188,10 +294,10 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
           3: { cellWidth: 35 }
         }
       });
-      
+
       yPosition = doc.lastAutoTable.finalY + 15;
     }
-    
+
     // Current Listings Table
     if (comparablesData.comparable_listings && comparablesData.comparable_listings.length > 0) {
       checkPageBreak(40);
@@ -200,15 +306,15 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
       doc.setTextColor(15, 23, 42);
       doc.text('Current Listings (Realestate.com.au)', 20, yPosition);
       yPosition += 5;
-      
+
       const listingsData = comparablesData.comparable_listings.slice(0, 5).map(comp => [
         comp.address,
         `$${comp.price.toLocaleString()}`,
         `${comp.beds || 'N/A'} bed, ${comp.baths || 'N/A'} bath`,
         comp.listing_type || 'For Sale'
       ]);
-      
-      doc.autoTable({
+
+      autoTable(doc, {
         startY: yPosition,
         head: [['Address', 'Price', 'Features', 'Status']],
         body: listingsData,
@@ -222,15 +328,15 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
           3: { cellWidth: 35 }
         }
       });
-      
+
       yPosition = doc.lastAutoTable.finalY + 15;
     }
   }
-  
+
   // NEW PAGE - Full Evaluation Report
   doc.addPage();
   yPosition = 20;
-  
+
   // Section header
   doc.setFillColor(14, 165, 233);
   doc.rect(0, yPosition - 5, pageWidth, 15, 'F');
@@ -239,23 +345,23 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
   doc.setFont('helvetica', 'bold');
   doc.text('Detailed Evaluation Report', pageWidth / 2, yPosition + 5, { align: 'center' });
   yPosition += 25;
-  
+
   // Evaluation report content - very strict formatting for consistency
   const reportLines = evaluationReport.split('\n');
-  
+
   reportLines.forEach(line => {
     const trimmedLine = line.trim();
-    
+
     // Skip empty lines with small spacing
     if (!trimmedLine) {
       yPosition += 2;
       return;
     }
-    
+
     // VERY STRICT heading detection - only numbered sections like "1)", "2)", "1.", "2."
     // This ensures only main section headings are formatted differently
     const isMainHeading = /^(\d+[.)]\s)/.test(trimmedLine);
-    
+
     // EXPLICITLY set font properties for EVERY line to ensure consistency
     if (isMainHeading) {
       checkPageBreak(15);
@@ -270,7 +376,7 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
       doc.setFontSize(11);
       doc.setTextColor(51, 65, 85); // Dark gray
     }
-    
+
     // Split text to fit page width and render each line with same formatting
     const splitText = doc.splitTextToSize(trimmedLine, pageWidth - 40);
     splitText.forEach((textLine, index) => {
@@ -289,7 +395,7 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
       yPosition += isMainHeading ? 7 : 5.5;
     });
   });
-  
+
   // Footer on last page
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
@@ -299,12 +405,12 @@ export const generateEvaluationPDF = (property, evaluationReport, comparablesDat
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
     doc.text('© 2025 PropertyPitch - Confidential', pageWidth - 20, pageHeight - 10, { align: 'right' });
   }
-  
+
   // Generate filename
   const filename = `Property_Evaluation_${property.location?.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-  
+
   // Save the PDF
   doc.save(filename);
-  
+
   return filename;
 };

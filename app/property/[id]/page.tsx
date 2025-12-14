@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { API } from "@/lib/config";
 import ReportUploadModal from "@/components/ReportUploadModal";
+import HistoricSalesCard from "@/components/HistoricSalesCard";
 import { usePageView } from "@/hooks/useAudit";
 
 // Using a different Facebook icon to avoid deprecation warning
@@ -41,6 +42,8 @@ interface Property {
   status?: string;
   sold_price?: number | null;
   sale_date?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export default function PropertyDetailPage() {
@@ -79,11 +82,7 @@ export default function PropertyDetailPage() {
   // Sold modal states
   const [showSoldModal, setShowSoldModal] = useState(false);
 
-  // Historic sales states
-  const [historicSales, setHistoricSales] = useState<any[]>([]);
-  const [historicSalesLoading, setHistoricSalesLoading] = useState(false);
-  const [historicSalesError, setHistoricSalesError] = useState<string | null>(null);
-  const [historicSalesInfo, setHistoricSalesInfo] = useState<{ suburb: string; state: string; postcode: string | null; propertyType: string; searchedAt: string | null; cached: boolean; scrapedUrl?: string; debug?: string } | null>(null);
+  // Sold modal state
   const [soldPrice, setSoldPrice] = useState("");
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [markingSold, setMarkingSold] = useState(false);
@@ -108,49 +107,45 @@ export default function PropertyDetailPage() {
     }
   };
 
-  // Fetch historic sales when property loads
-  const fetchHistoricSales = async () => {
-    setHistoricSalesLoading(true);
-    setHistoricSalesError(null);
-    try {
-      const response = await fetch(`/api/properties/${propertyId}/historic-sales`);
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to fetch historic sales');
-      }
-      setHistoricSales(data.sales || []);
-      setHistoricSalesInfo({
-        suburb: data.suburb,
-        state: data.state,
-        postcode: data.postcode,
-        propertyType: data.propertyType || 'all',
-        searchedAt: data.searchedAt || null,
-        cached: data.cached || false,
-        scrapedUrl: data.scrapedUrl || null,
-        debug: data.debug || null
-      });
-
-      // Show toast based on whether data was cached or freshly scraped
-      if (data.cached) {
-        toast.info(`Using cached ${data.propertyType} sales data (${data.total} results)`);
-      } else {
-        toast.success(`Fetched ${data.total} ${data.propertyType} sales from Homely.com.au`);
-      }
-    } catch (error: any) {
-      console.error("Error fetching historic sales:", error);
-      setHistoricSalesError(error.message);
-      toast.error("Failed to fetch historic sales");
-    } finally {
-      setHistoricSalesLoading(false);
-    }
-  };
-
-  // Fetch historic sales when property is loaded
+  // Auto-fetch coordinates if not set
   useEffect(() => {
-    if (property && propertyId) {
-      fetchHistoricSales();
-    }
-  }, [property?.id]);
+    const geocodeProperty = async () => {
+      if (!property || property.latitude || !property.location) return;
+
+      try {
+        console.log(`[Geocode] Fetching coordinates for: ${property.location}`);
+        const response = await fetch(`/api/geocode?address=${encodeURIComponent(property.location)}`);
+
+        if (!response.ok) {
+          console.log('[Geocode] Failed to get coordinates');
+          return;
+        }
+
+        const data = await response.json();
+        console.log(`[Geocode] Got coordinates: ${data.latitude}, ${data.longitude}`);
+
+        // Save coordinates to backend
+        await axios.patch(`${API}/properties/${propertyId}`, {
+          latitude: data.latitude,
+          longitude: data.longitude,
+        });
+
+        // Update local state
+        setProperty(prev => prev ? {
+          ...prev,
+          latitude: data.latitude,
+          longitude: data.longitude,
+        } : null);
+
+        console.log('[Geocode] Coordinates saved successfully');
+      } catch (error) {
+        console.error('[Geocode] Error:', error);
+      }
+    };
+
+    geocodeProperty();
+  }, [property?.id, property?.latitude, property?.location]);
+
 
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this property? This action cannot be undone.")) {
@@ -541,10 +536,24 @@ export default function PropertyDetailPage() {
         {/* Property Info */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           {/* Location */}
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 flex items-start gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 flex items-start gap-2">
             <MapPin size={24} className="text-gray-400 flex-shrink-0 mt-1" />
             {property.location}
           </h1>
+          {/* Coordinates */}
+          {property.latitude && property.longitude ? (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-gray-400 hover:text-purple-600 mb-4 inline-flex items-center gap-1 ml-8"
+            >
+              📍 {property.latitude.toFixed(6)}, {property.longitude.toFixed(6)}
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          ) : (
+            <p className="text-xs text-gray-300 mb-4 ml-8">Fetching coordinates...</p>
+          )}
 
           {/* Property Stats */}
           <div className="flex flex-wrap gap-4 sm:gap-6 mb-4 text-gray-600">
@@ -593,96 +602,18 @@ export default function PropertyDetailPage() {
         )}
 
         {/* Historic Sales in Area */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span className="text-xl">🏠</span>
-              Historic {property.property_type || ''} Sales
-              {historicSalesInfo && (
-                <span className="text-sm font-normal text-gray-500">
-                  ({historicSalesInfo.suburb}, {historicSalesInfo.state} {historicSalesInfo.postcode})
-                </span>
-              )}
-            </h2>
-            <button
-              onClick={() => fetchHistoricSales()}
-              disabled={historicSalesLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg font-semibold hover:bg-purple-600 transition-colors text-sm disabled:opacity-50"
-            >
-              {historicSalesLoading ? <Loader2 className="animate-spin" size={16} /> : <Home size={16} />}
-              {historicSalesLoading ? 'Loading...' : 'Refresh'}
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mb-3">
-            Showing recent {property.property_type?.toLowerCase() || 'property'} sales in this area.
-            {historicSalesInfo?.searchedAt && (
-              <span className="ml-1">
-                Data {historicSalesInfo.cached ? 'cached' : 'fetched'} on {new Date(historicSalesInfo.searchedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.
-              </span>
-            )}
-            {historicSalesInfo?.scrapedUrl ? (
-              <span className="ml-1">
-                Source: <a href={historicSalesInfo.scrapedUrl} target="_blank" rel="noopener noreferrer" className="text-purple-600 underline hover:text-purple-800">{historicSalesInfo.scrapedUrl}</a>
-              </span>
-            ) : (
-              <span className="ml-1">Source: Homely.com.au</span>
-            )}
-          </p>
-
-          <div className="bg-purple-50 rounded-xl p-5 border border-purple-200">
-            {historicSalesLoading ? (
-              <div className="text-center py-8">
-                <Loader2 className="animate-spin mx-auto mb-2" size={32} />
-                <p className="text-purple-700">Loading historic sales from Homely.com.au...</p>
-              </div>
-            ) : historicSalesError ? (
-              <div className="text-center py-4">
-                <p className="text-red-600 font-semibold">Error loading sales data</p>
-                <p className="text-red-500 text-sm">{historicSalesError}</p>
-              </div>
-            ) : historicSales.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="font-semibold text-purple-800 mb-2">No recent sales found</p>
-                <p className="text-purple-700 text-sm mb-2">
-                  No sold properties found in this area. Try clicking Refresh to fetch the latest data.
-                </p>
-                {historicSalesInfo?.debug && (
-                  <details className="text-left mt-3 bg-white rounded-lg p-3 border border-purple-200">
-                    <summary className="cursor-pointer text-sm font-semibold text-purple-700">Debug Info</summary>
-                    <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap break-all max-h-40 overflow-auto">
-                      {historicSalesInfo.debug}
-                    </pre>
-                  </details>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {historicSales.map((sale: any) => (
-                  <div
-                    key={sale.id}
-                    className="bg-white rounded-lg p-4 border border-purple-100 hover:border-purple-300 transition-colors"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{sale.address}</p>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                          {sale.beds && <span className="flex items-center gap-1"><Bed size={12} /> {sale.beds}</span>}
-                          {sale.baths && <span className="flex items-center gap-1"><Bath size={12} /> {sale.baths}</span>}
-                          {sale.cars && <span className="flex items-center gap-1"><Car size={12} /> {sale.cars}</span>}
-                          {sale.land_area && <span className="flex items-center gap-1"><Ruler size={12} /> {sale.land_area} m²</span>}
-                          <span className="text-purple-600">{sale.property_type}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-emerald-600">${sale.price?.toLocaleString()}</p>
-                        <p className="text-xs text-gray-500">{sale.sold_date}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <div className="bg-white mb-6">
+          <HistoricSalesCard
+            propertyId={propertyId}
+            propertyLocation={property.location}
+            propertyType={property.property_type}
+            propertyBeds={property.beds}
+            propertyBaths={property.baths}
+            propertyLatitude={property.latitude}
+            propertyLongitude={property.longitude}
+            variant="purple"
+            showSourceLink={true}
+          />
         </div>
 
         {/* RP Data Report */}

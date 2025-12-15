@@ -30,11 +30,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file types (including HEIC/HEIF for iPhone photos)
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'];
+
     for (const file of files) {
-      if (!allowedTypes.includes(file.type)) {
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
+      const hasValidMimeType = allowedMimeTypes.includes(file.type);
+      const hasValidExtension = allowedExtensions.includes(extension);
+
+      // On iPhone PWA, MIME type may be empty or application/octet-stream
+      // Also accept files with valid image extensions or that start with "image/"
+      const isImageMime = file.type.startsWith('image/');
+      const isAcceptable = hasValidMimeType || hasValidExtension || isImageMime || file.type === '' || file.type === 'application/octet-stream';
+
+      if (!isAcceptable) {
         return NextResponse.json(
-          { error: `Invalid file type: ${file.type}. Allowed: ${allowedTypes.join(', ')}` },
+          { error: `Invalid file type: ${file.type || 'unknown'}. Allowed: images (jpg, png, webp, gif, heic, heif)` },
           { status: 400 }
         );
       }
@@ -49,11 +60,22 @@ export async function POST(request: NextRequest) {
 
     const uploadedUrls: string[] = [];
 
+    // Map extensions to MIME types for fallback
+    const extToMime: Record<string, string> = {
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'webp': 'image/webp',
+      'gif': 'image/gif',
+      'heic': 'image/heic',
+      'heif': 'image/heif',
+    };
+
     for (const file of files) {
       // Generate unique filename
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(2, 8);
-      const extension = file.name.split('.').pop() || 'jpg';
+      const extension = (file.name.split('.').pop() || 'jpg').toLowerCase();
       const blobName = `${timestamp}-${randomId}.${extension}`;
 
       // Get blob client
@@ -63,10 +85,16 @@ export async function POST(request: NextRequest) {
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
+      // Determine content type - use file.type if valid, otherwise infer from extension
+      let contentType = file.type;
+      if (!contentType || contentType === 'application/octet-stream') {
+        contentType = extToMime[extension] || 'image/jpeg';
+      }
+
       // Upload to Azure
       await blockBlobClient.uploadData(buffer, {
         blobHTTPHeaders: {
-          blobContentType: file.type,
+          blobContentType: contentType,
         },
       });
 

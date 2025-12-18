@@ -1249,7 +1249,7 @@ export default function HomePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 sm:mb-8 p-4 sm:p-6 lg:p-8">
           <div className="flex items-start justify-between mb-2">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-              {editingId ? "Edit Property" : "List Your Property"}
+              {editingId ? "Edit Property" : "List Your Property."}
             </h2>
             {!editingId && (
               <button

@@ -575,20 +575,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     let historicSalesData: any = null;
     try {
-      const baseUrl = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      // Use request URL to determine base URL - most reliable across all environments
+      const requestUrl = new URL(request.url);
+      const baseUrl = `${requestUrl.protocol}//${requestUrl.host}`;
+      console.log(`[Evaluate] Using base URL: ${baseUrl}`);
 
       const historicSalesResponse = await fetch(`${baseUrl}/api/properties/${propertyId}/historic-sales`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
 
+      console.log(`[Evaluate] Historic sales response status: ${historicSalesResponse.status}`);
+
       if (historicSalesResponse.ok) {
         historicSalesData = await historicSalesResponse.json();
-        console.log(`[Evaluate] Got ${historicSalesData.sales?.length || 0} historic sales`);
+        console.log(`[Evaluate] Got ${historicSalesData.sales?.length || 0} historic sales, best_match: ${historicSalesData.best_match?.address || 'none'}`);
       } else {
-        console.log(`[Evaluate] Historic sales fetch failed: ${historicSalesResponse.status}`);
+        const errorText = await historicSalesResponse.text();
+        console.log(`[Evaluate] Historic sales fetch failed: ${historicSalesResponse.status} - ${errorText}`);
       }
     } catch (err) {
       console.log(`[Evaluate] Error fetching historic sales:`, err);

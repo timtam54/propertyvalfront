@@ -610,12 +610,26 @@ export default function HomePage() {
       if (!response.ok) {
         // Handle non-JSON error responses (like "Forbidden")
         const contentType = response.headers.get('content-type');
+        const status = response.status;
+
+        let errorMessage = '';
         if (contentType && contentType.includes('application/json')) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Upload failed');
+          errorMessage = errorData.error || 'Upload failed';
         } else {
           const errorText = await response.text();
-          throw new Error(errorText || `Upload failed (${response.status})`);
+          errorMessage = errorText || '';
+        }
+
+        // Provide user-friendly messages with troubleshooting info
+        if (status === 403 || errorMessage.toLowerCase().includes('forbidden')) {
+          throw new Error(`Upload blocked (Error 403). This may be caused by: your network/firewall, VPN, or browser extensions. Try: 1) Disable VPN/ad-blockers 2) Try a different network 3) Use mobile data. [${errorMessage.slice(0, 50)}]`);
+        } else if (status === 413) {
+          throw new Error('File too large. Please use smaller images (max 4.5MB each).');
+        } else if (status === 401) {
+          throw new Error('Session expired. Please refresh the page and log in again.');
+        } else {
+          throw new Error(`Upload failed (${status}): ${errorMessage.slice(0, 100)}`);
         }
       }
 

@@ -1,0 +1,3 @@
+[submodule "backend-ts"]
+	path = backend-ts
+	url = https://github.com/timtam54/propertyvalback.git

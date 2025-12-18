@@ -244,3 +244,57 @@ export interface MarketContext {
   last_updated: Date;
   updated_by: string;
 }
+
+// Historic Sales Matching Weights
+// Controls how comparable properties are scored against the target property
+export interface HistoricSalesWeights {
+  id: string;
+  name: string;
+  description?: string;
+
+  // Bedroom matching
+  bedroom_exact_match_bonus: number;
+  bedroom_diff_penalty_per_bed: number;
+
+  // Bathroom matching
+  bathroom_exact_match_bonus: number;
+  bathroom_diff_penalty_per_bath: number;
+
+  // Property type / density matching
+  density_house_to_unit_penalty: number;
+  density_house_to_subdivision_penalty: number;
+
+  // Distance-based adjustments (in km)
+  distance_very_close_bonus: number;
+  distance_very_close_threshold_km: number;
+  distance_close_bonus: number;
+  distance_close_threshold_km: number;
+  distance_moderate_penalty: number;
+  distance_moderate_threshold_km: number;
+  distance_far_penalty: number;
+  distance_far_threshold_km: number;
+  distance_very_far_penalty: number;
+  distance_very_far_threshold_km: number;
+
+  // Recency-based adjustments (in months)
+  recency_very_recent_bonus: number;
+  recency_very_recent_threshold_months: number;
+  recency_recent_bonus: number;
+  recency_recent_threshold_months: number;
+  recency_getting_old_penalty: number;
+  recency_getting_old_threshold_months: number;
+  recency_old_penalty: number;
+  recency_old_threshold_months: number;
+  recency_very_old_penalty: number;
+  recency_very_old_threshold_months: number;
+
+  // Land area matching
+  land_area_weight: number;
+  land_area_tolerance_percent: number;
+
+  // Metadata
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+  created_by?: string;
+}

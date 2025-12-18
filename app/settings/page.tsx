@@ -237,6 +237,55 @@ export default function SettingsPage() {
           </button>
         </section>
 
+        {/* Historic Sales Weights Section */}
+        <section style={{
+          background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+          border: '2px solid #a855f7',
+          borderRadius: '12px',
+          padding: '1rem',
+          marginBottom: '1rem'
+        }}>
+          <h2 style={{
+            fontSize: '1.1rem',
+            fontWeight: '700',
+            color: '#581c87',
+            marginBottom: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <span>🏠</span> Historic Sales Matching
+          </h2>
+          <p style={{
+            color: '#6b21a8',
+            fontSize: '0.85rem',
+            lineHeight: '1.5',
+            marginBottom: '1rem'
+          }}>
+            Configure weights for matching comparable property sales (bedrooms, distance, recency).
+          </p>
+          <button
+            onClick={() => router.push('/settings/historic-sales-weights')}
+            style={{
+              background: 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)',
+              color: 'white',
+              padding: '0.6rem 1rem',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: '600',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              width: '100%',
+              justifyContent: 'center'
+            }}
+          >
+            Configure Matching Weights →
+          </button>
+        </section>
+
         {/* Property Data API Keys Section */}
         <section style={{
           background: 'white',

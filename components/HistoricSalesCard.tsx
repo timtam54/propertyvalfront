@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bed, Bath, Car, Ruler, Home, Loader2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
+import { HistoricSalesWeights } from '@/lib/types';
 
 // Declare google maps types
 declare global {
@@ -139,9 +140,27 @@ export default function HistoricSalesCard({
   const [hasFetched, setHasFetched] = useState(!!initialSales);
   const [sortBy, setSortBy] = useState<'match' | 'distance' | 'beds' | 'baths' | 'size' | 'recent'>('match');
   const [viewMode, setViewMode] = useState<'table' | 'map'>('table');
+  const [weights, setWeights] = useState<HistoricSalesWeights | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+
+  // Fetch weights configuration from API
+  useEffect(() => {
+    const fetchWeights = async () => {
+      try {
+        const response = await fetch('/api/historic-sales-weights');
+        if (response.ok) {
+          const data = await response.json();
+          setWeights(data);
+        }
+      } catch (err) {
+        console.error('Error fetching weights configuration:', err);
+        // Will use default hardcoded values if fetch fails
+      }
+    };
+    fetchWeights();
+  }, []);
 
   // Auto-fetch on mount if no initial data provided
   useEffect(() => {
@@ -189,12 +208,58 @@ export default function HistoricSalesCard({
     }
   };
 
-  // Process sales with similarity score and distance
+  // Process sales with similarity score and distance using configurable weights
   const processedSales = sales.map((sale) => {
-    // Calculate similarity score
+    // Use weights from API or fall back to defaults
+    const w = weights || {
+      bedroom_exact_match_bonus: 0,
+      bedroom_diff_penalty_per_bed: 25,
+      bathroom_exact_match_bonus: 0,
+      bathroom_diff_penalty_per_bath: 20,
+      density_house_to_unit_penalty: 40,
+      density_house_to_subdivision_penalty: 20,
+      distance_very_close_bonus: 10,
+      distance_very_close_threshold_km: 0.5,
+      distance_close_bonus: 5,
+      distance_close_threshold_km: 1,
+      distance_moderate_penalty: 8,
+      distance_moderate_threshold_km: 2,
+      distance_far_penalty: 15,
+      distance_far_threshold_km: 3,
+      distance_very_far_penalty: 25,
+      distance_very_far_threshold_km: 5,
+      recency_very_recent_bonus: 10,
+      recency_very_recent_threshold_months: 3,
+      recency_recent_bonus: 5,
+      recency_recent_threshold_months: 6,
+      recency_getting_old_penalty: 5,
+      recency_getting_old_threshold_months: 12,
+      recency_old_penalty: 10,
+      recency_old_threshold_months: 18,
+      recency_very_old_penalty: 20,
+      recency_very_old_threshold_months: 24,
+    };
+
+    // Calculate similarity score using configurable weights
     const bedDiff = Math.abs(propertyBeds - (sale.beds || propertyBeds));
     const bathDiff = Math.abs(propertyBaths - (sale.baths || propertyBaths));
-    let similarity = Math.max(0, 100 - bedDiff * 25 - bathDiff * 20);
+
+    // Start with 100 and apply penalties/bonuses
+    let similarity = 100;
+
+    // Apply bedroom scoring
+    if (bedDiff === 0) {
+      similarity += w.bedroom_exact_match_bonus;
+    } else {
+      similarity -= bedDiff * w.bedroom_diff_penalty_per_bed;
+    }
+
+    // Apply bathroom scoring
+    if (bathDiff === 0) {
+      similarity += w.bathroom_exact_match_bonus;
+    } else {
+      similarity -= bathDiff * w.bathroom_diff_penalty_per_bath;
+    }
 
     // Apply density type penalty
     const targetDensity = getDensityType(propertyLocation, propertyType);
@@ -205,9 +270,9 @@ export default function HistoricSalesCard({
         (targetDensity === 'house' && saleDensity === 'unit') ||
         (targetDensity === 'unit' && saleDensity === 'house')
       ) {
-        similarity = Math.max(0, similarity - 40); // Big mismatch
+        similarity -= w.density_house_to_unit_penalty; // Big mismatch
       } else {
-        similarity = Math.max(0, similarity - 20); // Medium mismatch
+        similarity -= w.density_house_to_subdivision_penalty; // Medium mismatch
       }
     }
 
@@ -226,24 +291,24 @@ export default function HistoricSalesCard({
         sale.longitude
       );
 
-      // Apply distance-based score adjustment
-      if (distance < 0.5) {
-        // Very close (< 500m) - bonus
-        similarity = Math.min(100, similarity + 10);
-      } else if (distance < 1) {
-        // Close (500m - 1km) - small bonus
-        similarity = Math.min(100, similarity + 5);
-      } else if (distance > 5) {
-        // Very far (> 5km) - big penalty
-        similarity = Math.max(0, similarity - 25);
-      } else if (distance > 3) {
-        // Far (3-5km) - medium penalty
-        similarity = Math.max(0, similarity - 15);
-      } else if (distance > 2) {
-        // Moderate distance (2-3km) - small penalty
-        similarity = Math.max(0, similarity - 8);
+      // Apply distance-based score adjustment using configurable thresholds
+      if (distance < w.distance_very_close_threshold_km) {
+        // Very close - bonus
+        similarity += w.distance_very_close_bonus;
+      } else if (distance < w.distance_close_threshold_km) {
+        // Close - small bonus
+        similarity += w.distance_close_bonus;
+      } else if (distance > w.distance_very_far_threshold_km) {
+        // Very far - big penalty
+        similarity -= w.distance_very_far_penalty;
+      } else if (distance > w.distance_far_threshold_km) {
+        // Far - medium penalty
+        similarity -= w.distance_far_penalty;
+      } else if (distance > w.distance_moderate_threshold_km) {
+        // Moderate distance - small penalty
+        similarity -= w.distance_moderate_penalty;
       }
-      // 1-2km: no adjustment
+      // Between close and moderate thresholds: no adjustment
     }
 
     // Calculate months since sale for recency scoring
@@ -266,33 +331,36 @@ export default function HistoricSalesCard({
                   (now.getMonth() - saleDate.getMonth());
     }
 
-    // Apply recency-based score adjustment
+    // Apply recency-based score adjustment using configurable thresholds
     if (monthsAgo != null) {
-      if (monthsAgo <= 3) {
-        // Very recent (0-3 months) - bonus
-        similarity = Math.min(100, similarity + 10);
-      } else if (monthsAgo <= 6) {
-        // Recent (3-6 months) - small bonus
-        similarity = Math.min(100, similarity + 5);
-      } else if (monthsAgo > 24) {
-        // Very old (> 2 years) - big penalty
-        similarity = Math.max(0, similarity - 20);
-      } else if (monthsAgo > 18) {
-        // Old (18-24 months) - medium penalty
-        similarity = Math.max(0, similarity - 10);
-      } else if (monthsAgo > 12) {
-        // Getting old (12-18 months) - small penalty
-        similarity = Math.max(0, similarity - 5);
+      if (monthsAgo <= w.recency_very_recent_threshold_months) {
+        // Very recent - bonus
+        similarity += w.recency_very_recent_bonus;
+      } else if (monthsAgo <= w.recency_recent_threshold_months) {
+        // Recent - small bonus
+        similarity += w.recency_recent_bonus;
+      } else if (monthsAgo > w.recency_very_old_threshold_months) {
+        // Very old - big penalty
+        similarity -= w.recency_very_old_penalty;
+      } else if (monthsAgo > w.recency_old_threshold_months) {
+        // Old - medium penalty
+        similarity -= w.recency_old_penalty;
+      } else if (monthsAgo > w.recency_getting_old_threshold_months) {
+        // Getting old - small penalty
+        similarity -= w.recency_getting_old_penalty;
       }
-      // 6-12 months: no adjustment
+      // Between recent and getting_old thresholds: no adjustment
     }
+
+    // Clamp similarity to 0-100 range
+    similarity = Math.max(0, Math.min(100, similarity));
 
     const isExactMatch =
       sale.beds === propertyBeds &&
       sale.baths === propertyBaths &&
       targetDensity === saleDensity &&
-      (distance == null || distance < 2) && // Only exact match if within 2km
-      (monthsAgo == null || monthsAgo <= 12); // Only exact match if sold within 12 months
+      (distance == null || distance < w.distance_moderate_threshold_km) && // Only exact match if within moderate distance
+      (monthsAgo == null || monthsAgo <= w.recency_getting_old_threshold_months); // Only exact match if sold recently
 
     return {
       ...sale,

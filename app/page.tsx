@@ -102,6 +102,19 @@ export default function HomePage() {
     }
   }, [isAuthenticated, router]);
 
+  // Don't render page content until authenticated - prevents race condition
+  // where user can interact with form before redirect happens
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Handle logout
   const handleLogout = () => {
     if (isGoogleAuthenticated) {
@@ -594,11 +607,19 @@ export default function HomePage() {
         body: formDataUpload,
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+        // Handle non-JSON error responses (like "Forbidden")
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Upload failed');
+        } else {
+          const errorText = await response.text();
+          throw new Error(errorText || `Upload failed (${response.status})`);
+        }
       }
+
+      const data = await response.json();
 
       toast.dismiss(loadingToast);
       toast.success(`${files.length} image(s) uploaded`);

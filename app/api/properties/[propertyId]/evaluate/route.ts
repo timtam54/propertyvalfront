@@ -724,9 +724,40 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
     const openai = getOpenAI();
 
     // Build messages array - include images if available for visual analysis
+    // Build valuation anchor text - this is CRITICAL for accurate valuations
+    let valuationAnchor = '';
+    if (exactMatches.length > 0) {
+      const exactPrices = exactMatches.map(e => e.price);
+      const exactAvg = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+      const exactMin = Math.min(...exactPrices);
+      const exactMax = Math.max(...exactPrices);
+      valuationAnchor = `
+⚠️ CRITICAL VALUATION ANCHOR - YOU MUST USE THIS:
+We have ${exactMatches.length} EXACT MATCH comparable sale(s) with the same bed/bath configuration (${property.beds} bed, ${property.baths} bath):
+- Exact Match Price Range: ${formatPrice(exactMin)} to ${formatPrice(exactMax)}
+- Exact Match Average: ${formatPrice(exactAvg)}
+
+YOUR ESTIMATED VALUE RANGE MUST BE BASED ON THESE EXACT MATCH PRICES.
+- If property condition is average: use ${formatPrice(Math.round(exactAvg * 0.95))} to ${formatPrice(Math.round(exactAvg * 1.05))}
+- If property is in excellent/renovated condition: use ${formatPrice(Math.round(exactAvg * 1.0))} to ${formatPrice(Math.round(exactAvg * 1.10))}
+- If property needs work/dated: use ${formatPrice(Math.round(exactAvg * 0.85))} to ${formatPrice(Math.round(exactAvg * 0.95))}
+
+DO NOT estimate values significantly different from the comparable sales data. The comparable sales are REAL RECENT SALES in the same area.`;
+    } else if (bestMatch) {
+      valuationAnchor = `
+⚠️ CRITICAL VALUATION ANCHOR - YOU MUST USE THIS:
+The PRIMARY COMPARABLE sold for ${formatPrice(bestMatch.price)}.
+Your estimated value range MUST be anchored to this price:
+- Base your valuation on ${formatPrice(Math.round(bestMatch.price * 0.90))} to ${formatPrice(Math.round(bestMatch.price * 1.10))}
+- Adjust within this range based on property condition and spec differences.
+
+DO NOT estimate values significantly different from the comparable sales data.`;
+    }
+
     const systemPrompt = `You are an expert Australian property valuer with expertise in assessing property condition and build quality from photos.
 
-Based on ALL the data provided (comparable sales, RP Data report, additional reports, AND property photos if provided), estimate a fair market value range for this property.${dataSourcesNote}
+IMPORTANT: Your valuation MUST be based on the ACTUAL COMPARABLE SALES DATA provided below. Do NOT estimate values based on general market knowledge or assumptions. The comparable sales are REAL VERIFIED SALES from official sources.
+${valuationAnchor}
 
 ${property.images && property.images.length > 0 ? `
 PHOTO ANALYSIS INSTRUCTIONS:
@@ -741,22 +772,22 @@ You have been provided with ${property.images.length} photo(s) of this property.
 - Overall presentation and street appeal
 - Any visible issues or standout features
 
-Use your visual assessment to ADJUST the valuation up or down from comparable sales:
-- Premium finishes/recent renovation: +5-15% above comparable average
+Use your visual assessment to ADJUST the valuation up or down from the comparable sale prices (NOT to create a new estimate):
+- Premium finishes/recent renovation: +5-10% above comparable average
 - Good condition, modern: at comparable average
 - Dated but well-maintained: -5-10% below comparable average
-- Poor condition/needs work: -10-20% below comparable average
+- Poor condition/needs work: -10-15% below comparable average
 ` : ''}
 
 Format your response as a clear, professional report with:
 1. Property Overview
-2. ${property.images && property.images.length > 0 ? 'Visual Assessment (detailed analysis of photos - build quality, condition, finishes, presentation)\n3. ' : ''}Market Analysis (using the comparable sales data)
+2. ${property.images && property.images.length > 0 ? 'Visual Assessment (detailed analysis of photos - build quality, condition, finishes, presentation)\n3. ' : ''}Market Analysis (using the comparable sales data - CITE THE ACTUAL SALE PRICES)
 ${property.images && property.images.length > 0 ? '4. ' : '3. '}RP Data & Additional Report Insights (if provided - extract key valuation data, land value, improvements value, previous sales, etc.)
-${property.images && property.images.length > 0 ? '5. ' : '4. '}Valuation Assessment (synthesizing all available data${property.images && property.images.length > 0 ? ' INCLUDING visual condition assessment' : ''})
-${property.images && property.images.length > 0 ? '6. ' : '5. '}Estimated Value Range (provide specific $ figures based on all available data)
+${property.images && property.images.length > 0 ? '5. ' : '4. '}Valuation Assessment (explain how you derived the value FROM THE COMPARABLE SALES)
+${property.images && property.images.length > 0 ? '6. ' : '5. '}Estimated Value Range (provide specific $ figures BASED ON THE COMPARABLE SALES DATA - your range MUST align with the comparable prices)
 ${property.images && property.images.length > 0 ? '7. ' : '6. '}Key Factors Affecting Value
 
-Be specific with dollar amounts. If RP Data or additional reports contain valuation figures, reference and reconcile them with the comparable sales data.${property.images && property.images.length > 0 ? ' IMPORTANTLY: Explain how the visual condition/quality of the property affects your valuation relative to comparables.' : ''}`;
+Be specific with dollar amounts. Your estimated value MUST be justified by and consistent with the comparable sales provided.${property.images && property.images.length > 0 ? ' Explain how the visual condition/quality affects value relative to the comparables.' : ''}`;
 
     // Build user message content - text + images if available
     type MessageContent = string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }>;

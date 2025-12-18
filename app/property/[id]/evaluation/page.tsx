@@ -977,6 +977,22 @@ export default function PropertyEvaluationPage() {
               </div>
             )}
 
+            {/* Historic Sales in Area - SHOWN FIRST as primary data source */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <HistoricSalesCard
+                propertyId={propertyId}
+                propertyLocation={property.location}
+                propertyType={property.property_type}
+                propertyBeds={property.beds}
+                propertyBaths={property.baths}
+                propertyLatitude={property.latitude}
+                propertyLongitude={property.longitude}
+                variant="purple"
+                maxItems={15}
+                showSourceLink={true}
+              />
+            </div>
+
             {/* Evaluation Report */}
             <div
               style={{
@@ -1093,22 +1109,6 @@ export default function PropertyEvaluationPage() {
                 </div>
               </div>
             ) : null}
-
-            {/* Historic Sales in Area - PRIMARY SOURCE FOR VALUATION */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <HistoricSalesCard
-                propertyId={propertyId}
-                propertyLocation={property.location}
-                propertyType={property.property_type}
-                propertyBeds={property.beds}
-                propertyBaths={property.baths}
-                propertyLatitude={property.latitude}
-                propertyLongitude={property.longitude}
-                variant="purple"
-                maxItems={15}
-                showSourceLink={true}
-              />
-            </div>
 
             {/* Valuation Quality Section */}
             <div style={{ marginBottom: '2rem' }}>

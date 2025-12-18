@@ -1,0 +1,51 @@
+name: Deploy Backend to Azure App Service
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend-ts/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend-ts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend-ts
+        run: npm ci
+
+      - name: Build TypeScript
+        working-directory: backend-ts
+        run: npm run build
+
+      - name: Create deployment package
+        working-directory: backend-ts
+        run: |
+          mkdir -p deploy
+          cp -r dist deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+
+      - name: Install production dependencies
+        working-directory: backend-ts/deploy
+        run: npm ci --production
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: propertyval-api
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: backend-ts/deploy

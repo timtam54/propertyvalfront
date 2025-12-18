@@ -735,7 +735,16 @@ export default function HomePage() {
       await fetchProperties();
     } catch (error: any) {
       console.error("Error saving property:", error);
-      toast.error(error.response?.data?.detail || "Failed to save property");
+      // Handle various error formats - Vercel may return plain text "Forbidden"
+      let errorMessage = "Failed to save property";
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.status === 403) {
+        errorMessage = "Access denied. Please try logging in again.";
+      } else if (typeof error.response?.data === 'string' && error.response.data.includes('Forbidden')) {
+        errorMessage = "Access denied. Please try logging in again.";
+      }
+      toast.error(errorMessage);
       setLoading(false);
     }
   };
@@ -847,7 +856,13 @@ export default function HomePage() {
       setShowRpDataModal(false);
     } catch (error: any) {
       console.error("Error extracting PDF text:", error);
-      toast.error(error.response?.data?.detail || "Failed to extract text from PDF. Please try pasting the text instead.");
+      let errorMessage = "Failed to extract text from PDF. Please try pasting the text instead.";
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.status === 403 || (typeof error.response?.data === 'string' && error.response.data.includes('Forbidden'))) {
+        errorMessage = "Access denied. Please try logging in again.";
+      }
+      toast.error(errorMessage);
     } finally {
       setUploadingRpData(false);
     }
@@ -868,7 +883,13 @@ export default function HomePage() {
       setShowAdditionalReportModal(false);
     } catch (error: any) {
       console.error("Error extracting PDF text:", error);
-      toast.error(error.response?.data?.detail || "Failed to extract text from PDF. Please try pasting the text instead.");
+      let errorMessage = "Failed to extract text from PDF. Please try pasting the text instead.";
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.status === 403 || (typeof error.response?.data === 'string' && error.response.data.includes('Forbidden'))) {
+        errorMessage = "Access denied. Please try logging in again.";
+      }
+      toast.error(errorMessage);
     } finally {
       setUploadingAdditionalReport(false);
     }
@@ -1249,7 +1270,7 @@ export default function HomePage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 sm:mb-8 p-4 sm:p-6 lg:p-8">
           <div className="flex items-start justify-between mb-2">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-              {editingId ? "Edit Property" : "List Your Property."}
+              {editingId ? "Edit Property" : "List Your Property"}
             </h2>
             {!editingId && (
               <button

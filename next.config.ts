@@ -4,6 +4,12 @@ const nextConfig: NextConfig = {
   env: {
     DOMAIN_API_KEY: process.env.DOMAIN_API_KEY,
   },
+  // Increase body size limit for image uploads (default is 4.5MB)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+  },
   async headers() {
     return [
       {

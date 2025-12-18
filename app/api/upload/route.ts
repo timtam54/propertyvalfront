@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BlobServiceClient } from '@azure/storage-blob';
 
+// Configure body size limit for this route (50MB for multiple image uploads)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
 const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const AZURE_CONTAINER_NAME = process.env.AZURE_CONTAINER_NAME || 'property-images';
 
@@ -11,15 +20,27 @@ const AZURE_CONTAINER_NAME = process.env.AZURE_CONTAINER_NAME || 'property-image
  * Returns array of blob URLs
  */
 export async function POST(request: NextRequest) {
+  console.log('[Upload] Received upload request');
+
   try {
     if (!AZURE_STORAGE_CONNECTION_STRING) {
+      console.error('[Upload] Azure Storage connection string not configured');
       return NextResponse.json(
         { error: 'Azure Storage not configured' },
         { status: 500 }
       );
     }
 
-    const formData = await request.formData();
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (formError) {
+      console.error('[Upload] Error parsing form data:', formError);
+      return NextResponse.json(
+        { error: 'Failed to parse upload data. File may be too large.' },
+        { status: 400 }
+      );
+    }
     const files = formData.getAll('files') as File[];
 
     if (!files || files.length === 0) {

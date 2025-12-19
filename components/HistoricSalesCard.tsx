@@ -798,22 +798,16 @@ export default function HistoricSalesCard({
                       )}
                       <span className="text-xs text-gray-500">{sale.similarity}% match</span>
                       {sale.distance != null && (
-                        sale.homely_url ? (
-                          <a
-                            href={sale.homely_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 font-medium hover:underline inline-flex items-center gap-1"
-                            title="View on Homely"
-                          >
-                            {formatDistance(sale.distance)} away
-                            <MapPin size={10} />
-                          </a>
-                        ) : (
-                          <span className="text-xs text-blue-600 font-medium">
-                            {formatDistance(sale.distance)} away
-                          </span>
-                        )
+                        <a
+                          href={`https://www.google.com/search?q=${encodeURIComponent(sale.address)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 font-medium hover:underline inline-flex items-center gap-1"
+                          title="Search on Google"
+                        >
+                          {formatDistance(sale.distance)} away
+                          <MapPin size={10} />
+                        </a>
                       )}
                     </div>
 

@@ -49,9 +49,15 @@ jobs:
           cd deploy
           zip -r ../deploy.zip .
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v2
+      - name: Login to Azure
+        uses: azure/login@v1
         with:
-          app-name: propertyval-web
-          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
-          package: deploy.zip
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App
+        run: |
+          az webapp deploy \
+            --resource-group propertyval-rg \
+            --name propertyval-web \
+            --src-path deploy.zip \
+            --type zip

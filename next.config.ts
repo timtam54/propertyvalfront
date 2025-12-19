@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   env: {
     DOMAIN_API_KEY: process.env.DOMAIN_API_KEY,
   },

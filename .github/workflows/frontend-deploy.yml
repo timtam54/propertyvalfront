@@ -36,24 +36,12 @@ jobs:
           NEXT_PUBLIC_AZURE_AD_TENANT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_AD_TENANT_ID }}
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
 
-      - name: Create deployment package
+      - name: Prepare standalone deployment
         run: |
-          mkdir -p deploy
-          cp -r .next deploy/
-          cp -r public deploy/
-          cp package.json deploy/
-          cp package-lock.json deploy/
-          cp next.config.ts deploy/ 2>/dev/null || true
-          cp next.config.js deploy/ 2>/dev/null || true
-
-      - name: Install production dependencies
-        working-directory: deploy
-        run: npm ci --production
-
-      - name: Create zip for deployment
-        run: |
-          cd deploy
-          zip -r ../app.zip .
+          cp -r .next/static .next/standalone/.next/
+          cp -r public .next/standalone/
+          cd .next/standalone
+          zip -r ../../app.zip .
 
       - name: Deploy to Azure using CLI
         env:

@@ -30,11 +30,11 @@ jobs:
       - name: Build Next.js
         run: npm run build
         env:
-          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY }}
+          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: AIzaSyANThwic7Udj0r5ulBoPN9Dp2lSwJKOAK4
           NEXT_PUBLIC_BACKEND_URL: https://backend-ts-gamma.vercel.app
-          NEXT_PUBLIC_AZURE_AD_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_AD_CLIENT_ID }}
-          NEXT_PUBLIC_AZURE_AD_TENANT_ID: ${{ secrets.NEXT_PUBLIC_AZURE_AD_TENANT_ID }}
-          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
+          NEXT_PUBLIC_AZURE_AD_CLIENT_ID: d26ae572-f93f-4cb5-b53c-5825eb8a596e
+          NEXT_PUBLIC_AZURE_AD_TENANT_ID: 9951d859-c4eb-4983-8987-062d0b8a8b39
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: 547867734324-dnin22seejnnqnkkaefonp74fdl2j70k.apps.googleusercontent.com
 
       - name: Prepare deployment package
         run: |

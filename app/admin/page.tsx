@@ -1006,7 +1006,7 @@ export default function AdminPage() {
         {activeTab === 'settings' && (
           <div className="space-y-6">
             {/* Quick Links */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div
                 onClick={() => router.push('/settings/marketing')}
                 className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-xl p-6 cursor-pointer hover:shadow-md transition-all"
@@ -1031,6 +1031,19 @@ export default function AdminPage() {
                   <h3 className="text-lg font-semibold text-amber-900">Market Context</h3>
                 </div>
                 <p className="text-amber-700 text-sm">Update interest rates and market statistics.</p>
+              </div>
+
+              <div
+                onClick={() => router.push('/settings/historic-sales-weights')}
+                className="bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-300 rounded-xl p-6 cursor-pointer hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-purple-500 rounded-lg">
+                    <BarChart3 className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-purple-900">Sales Matching Weights</h3>
+                </div>
+                <p className="text-purple-700 text-sm">Configure weights for bedrooms, bathrooms, land size, distance, and sale recency.</p>
               </div>
             </div>
 

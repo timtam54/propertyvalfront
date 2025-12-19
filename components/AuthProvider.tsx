@@ -7,7 +7,11 @@ import { msalConfig } from "@/lib/msalConfig";
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { API } from "@/lib/config";
 
-const msalInstance = new PublicClientApplication(msalConfig);
+// Create MSAL instance only on client side
+let msalInstance: PublicClientApplication | null = null;
+if (typeof window !== "undefined") {
+  msalInstance = new PublicClientApplication(msalConfig);
+}
 
 // Google user type
 interface GoogleUser {
@@ -37,7 +41,7 @@ export const useGoogleAuth = () => useContext(AuthContext);
 // Hook to get current user's email from either Google or Microsoft auth
 export const useUserEmail = () => {
   const { googleUser } = useGoogleAuth();
-  const accounts = msalInstance.getAllAccounts();
+  const accounts = msalInstance?.getAllAccounts() || [];
   const msalAccount = accounts.length > 0 ? accounts[0] : null;
 
   // Return Google email if logged in with Google, otherwise Microsoft email
@@ -94,12 +98,17 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initializeMsal = async () => {
+      if (!msalInstance) {
+        setIsInitialized(true);
+        return;
+      }
+
       await msalInstance.initialize();
 
       // Handle redirect promise
       msalInstance.handleRedirectPromise().then((response) => {
         if (response && response.account) {
-          msalInstance.setActiveAccount(response.account);
+          msalInstance!.setActiveAccount(response.account);
           // Sync Microsoft user to backend on login
           const email = response.account.username;
           const name = response.account.name || email.split('@')[0];
@@ -116,7 +125,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       msalInstance.addEventCallback((event: EventMessage) => {
         if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
           const payload = event.payload as AuthenticationResult;
-          msalInstance.setActiveAccount(payload.account);
+          msalInstance!.setActiveAccount(payload.account);
           // Sync Microsoft user to backend on login
           if (payload.account) {
             const email = payload.account.username;
@@ -181,18 +190,26 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
-  return (
-    <GoogleOAuthProvider clientId={googleClientId}>
-      <AuthContext.Provider value={{
-        googleUser,
-        setGoogleUser,
-        isGoogleAuthenticated: !!googleUser,
-        googleLogout,
-      }}>
+  const content = (
+    <AuthContext.Provider value={{
+      googleUser,
+      setGoogleUser,
+      isGoogleAuthenticated: !!googleUser,
+      googleLogout,
+    }}>
+      {msalInstance ? (
         <MsalProvider instance={msalInstance}>
           {children}
         </MsalProvider>
-      </AuthContext.Provider>
+      ) : (
+        children
+      )}
+    </AuthContext.Provider>
+  );
+
+  return (
+    <GoogleOAuthProvider clientId={googleClientId}>
+      {content}
     </GoogleOAuthProvider>
   );
 }

@@ -598,36 +598,134 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       console.log(`[Evaluate] Error fetching historic sales:`, err);
     }
 
-    // Convert historic sales to our SoldProperty format
+    // Convert historic sales to our SoldProperty format and calculate similarity scores
+    // (The historic-sales API doesn't return scores - they're calculated client-side in HistoricSalesCard)
     let soldProperties: SoldProperty[] = [];
     if (historicSalesData?.sales) {
-      soldProperties = historicSalesData.sales.map((sale: any) => ({
-        id: sale.id || crypto.randomUUID(),
-        address: sale.address,
-        price: sale.price,
-        beds: sale.beds,
-        baths: sale.baths,
-        cars: sale.cars,
-        land_area: sale.land_area,
-        property_type: sale.property_type || 'house',
-        sold_date: sale.sold_date,
-        sold_date_raw: sale.sold_date_raw ? new Date(sale.sold_date_raw) : null,
-        source: sale.source || 'homely.com.au',
-        similarity_score: sale.similarity_score,
-        latitude: sale.latitude,
-        longitude: sale.longitude,
-        distance_km: sale.distance_km,
-      }));
+      // First, geocode the property if we don't have coordinates
+      let propertyLat = property.latitude;
+      let propertyLng = property.longitude;
+
+      if (!propertyLat || !propertyLng) {
+        const coords = await geocodeAddress(property.location);
+        if (coords) {
+          propertyLat = coords.lat;
+          propertyLng = coords.lng;
+        }
+      }
+
+      soldProperties = historicSalesData.sales.map((sale: any) => {
+        // Calculate distance if we have coordinates
+        let distance_km: number | null = null;
+        if (propertyLat && propertyLng && sale.latitude && sale.longitude) {
+          distance_km = calculateDistance(propertyLat, propertyLng, sale.latitude, sale.longitude);
+        }
+
+        // Calculate similarity score (same logic as HistoricSalesCard)
+        const bedDiff = Math.abs((property.beds || 3) - (sale.beds || 3));
+        const bathDiff = Math.abs((property.baths || 2) - (sale.baths || 2));
+
+        let similarity = 100;
+
+        // Bedroom penalty (25 points per bedroom difference)
+        similarity -= bedDiff * 25;
+
+        // Bathroom penalty (20 points per bathroom difference)
+        similarity -= bathDiff * 20;
+
+        // Density type check
+        const targetDensity = getPropertyDensityType(property.location, property.property_type);
+        const saleDensity = getPropertyDensityType(sale.address, sale.property_type);
+
+        if (targetDensity !== saleDensity) {
+          if ((targetDensity === 'house' && saleDensity === 'unit') ||
+              (targetDensity === 'unit' && saleDensity === 'house')) {
+            similarity -= 40; // Big mismatch
+          } else {
+            similarity -= 20; // Medium mismatch
+          }
+        }
+
+        // Distance scoring
+        if (distance_km != null) {
+          if (distance_km < 0.5) {
+            similarity += 10; // Very close bonus
+          } else if (distance_km < 1) {
+            similarity += 5; // Close bonus
+          } else if (distance_km > 5) {
+            similarity -= 25; // Very far penalty
+          } else if (distance_km > 3) {
+            similarity -= 15; // Far penalty
+          } else if (distance_km > 2) {
+            similarity -= 8; // Moderate penalty
+          }
+        }
+
+        // Recency scoring
+        let saleDate: Date | null = sale.sold_date_raw ? new Date(sale.sold_date_raw) : null;
+        if (!saleDate && sale.sold_date && sale.sold_date !== 'Recently') {
+          const parsed = new Date(sale.sold_date);
+          if (!isNaN(parsed.getTime())) {
+            saleDate = parsed;
+          }
+        }
+
+        if (saleDate && !isNaN(saleDate.getTime())) {
+          const now = new Date();
+          const monthsAgo = (now.getFullYear() - saleDate.getFullYear()) * 12 + (now.getMonth() - saleDate.getMonth());
+
+          if (monthsAgo <= 3) {
+            similarity += 10; // Very recent bonus
+          } else if (monthsAgo <= 6) {
+            similarity += 5; // Recent bonus
+          } else if (monthsAgo > 24) {
+            similarity -= 20; // Very old penalty
+          } else if (monthsAgo > 18) {
+            similarity -= 10; // Old penalty
+          } else if (monthsAgo > 12) {
+            similarity -= 5; // Getting old penalty
+          }
+        }
+
+        // Clamp similarity to 0-100
+        similarity = Math.max(0, Math.min(100, similarity));
+
+        return {
+          id: sale.id || crypto.randomUUID(),
+          address: sale.address,
+          price: sale.price,
+          beds: sale.beds,
+          baths: sale.baths,
+          cars: sale.cars,
+          land_area: sale.land_area,
+          property_type: sale.property_type || 'house',
+          sold_date: sale.sold_date,
+          sold_date_raw: sale.sold_date_raw ? new Date(sale.sold_date_raw) : null,
+          source: sale.source || 'homely.com.au',
+          similarity_score: similarity,
+          latitude: sale.latitude,
+          longitude: sale.longitude,
+          distance_km: distance_km,
+        };
+      });
+
+      // Sort by similarity score (highest first) - this is the key fix!
+      soldProperties.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
     }
 
     console.log(`[Evaluate] Using ${soldProperties.length} historic sales for valuation`);
+    if (soldProperties.length > 0) {
+      console.log(`[Evaluate] Top 3 matches:`);
+      soldProperties.slice(0, 3).forEach((s, i) => {
+        console.log(`  ${i + 1}. ${s.address} - $${s.price} (${s.beds}bed/${s.baths}bath) - ${s.similarity_score}% match`);
+      });
+    }
 
-    // Use the best match from historic sales (already sorted by similarity)
+    // Take top 10 by similarity
     const comparables = soldProperties.slice(0, 10);
-    const bestMatch = historicSalesData?.best_match ? {
-      ...historicSalesData.best_match,
-      id: historicSalesData.best_match.id || crypto.randomUUID(),
-    } : (comparables.length > 0 ? comparables[0] : null);
+
+    // Best match is now the first one (highest similarity)
+    const bestMatch = comparables.length > 0 ? comparables[0] : null;
 
     // Filter exact matches (same beds/baths, recent, nearby)
     const exactMatches = comparables.filter((p: SoldProperty) =>

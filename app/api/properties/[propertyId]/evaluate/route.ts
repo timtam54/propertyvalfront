@@ -856,29 +856,57 @@ Your estimated value range MUST be anchored to this price:
 DO NOT estimate values significantly different from the comparable sales data.`;
     }
 
-    // Get top 3 comparables for the Market Analysis section
-    const top3Comparables = comparables.slice(0, 3);
-    let top3ComparablesText = '';
-    if (top3Comparables.length > 0) {
-      top3ComparablesText = top3Comparables.map((c, i) =>
-        `${i + 1}. ${c.address} - SOLD for ${formatPrice(c.price)} (${c.beds} bed, ${c.baths} bath, sold ${c.sold_date})`
+    // Get top 5 comparables for the Market Analysis section (increased from 3)
+    const topComparables = comparables.slice(0, 5);
+    let topComparablesText = '';
+    let comparablesTemplate = '';
+    if (topComparables.length > 0) {
+      topComparablesText = topComparables.map((c, i) =>
+        `${i + 1}. ${c.address} - SOLD for ${formatPrice(c.price)} (${c.beds} bed, ${c.baths} bath, ${c.land_area ? c.land_area + ' m², ' : ''}${c.similarity_score}% match, sold ${c.sold_date})`
       ).join('\n');
+
+      // Create a template showing exactly how the AI should format the Market Analysis section
+      comparablesTemplate = `
+TEMPLATE FOR MARKET ANALYSIS SECTION - COPY THIS FORMAT EXACTLY:
+
+## 3. Market Analysis
+
+**Comparable Sales Data:**
+
+The following recent sales from the Historic Property Sales database provide the foundation for this valuation:
+
+${topComparables.map((c, i) =>
+`${i + 1}. **${c.address}**
+   - Sale Price: ${formatPrice(c.price)}
+   - Specs: ${c.beds} bed, ${c.baths} bath${c.land_area ? ', ' + c.land_area + ' m²' : ''}
+   - Sold: ${c.sold_date}
+   - Match Score: ${c.similarity_score}%`
+).join('\n\n')}
+
+**Market Summary:**
+- Price Range: ${formatPrice(stats.min)} to ${formatPrice(stats.max)}
+- Average Sale Price: ${formatPrice(stats.avg)}
+${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${property.baths}bath): ${formatPrice(Math.round(exactMatches.map(e => e.price).reduce((a, b) => a + b, 0) / exactMatches.length))}` : ''}
+`;
     }
 
     const systemPrompt = `You are an expert Australian property valuer with expertise in assessing property condition and build quality from photos.
 
-⚠️⚠️⚠️ CRITICAL INSTRUCTION - READ THIS CAREFULLY ⚠️⚠️⚠️
-You MUST ONLY use the REAL comparable sales data provided below.
+⚠️⚠️⚠️ ABSOLUTE REQUIREMENT - YOU MUST FOLLOW THIS ⚠️⚠️⚠️
+In the Market Analysis section, you MUST copy the EXACT addresses and prices from the Historic Property Sales data provided below.
 DO NOT INVENT, FABRICATE, OR MAKE UP ANY ADDRESSES OR SALE PRICES.
-DO NOT use placeholder addresses like "21 Example St" or "nearby property".
-EVERY address you cite MUST be copied EXACTLY from the comparable sales data provided.
-
-If you cannot find suitable comparables in the provided data, say "Limited comparable data available" - DO NOT make up fake sales.
+DO NOT use placeholder addresses like "21 Example St" or "nearby property" or "a similar 3-bedroom property".
+EVERY address you cite MUST be copied CHARACTER-FOR-CHARACTER from the data below.
 
 ${valuationAnchor}
 
-THE ONLY COMPARABLE SALES YOU MAY REFERENCE IN YOUR REPORT ARE:
-${top3ComparablesText || 'No comparable sales data available - provide estimate based on general market knowledge only and clearly state this limitation.'}
+═══════════════════════════════════════════════════════════════
+HISTORIC PROPERTY SALES DATA - USE THESE EXACT ADDRESSES:
+═══════════════════════════════════════════════════════════════
+${topComparablesText || 'No comparable sales data available.'}
+═══════════════════════════════════════════════════════════════
+
+${comparablesTemplate}
 
 ${property.images && property.images.length > 0 ? `
 PHOTO ANALYSIS INSTRUCTIONS:
@@ -893,24 +921,50 @@ You have been provided with ${property.images.length} photo(s) of this property.
 - Overall presentation and street appeal
 - Any visible issues or standout features
 
-Use your visual assessment to ADJUST the valuation up or down from the comparable sale prices (NOT to create a new estimate):
+Use your visual assessment to ADJUST the valuation up or down from the comparable sale prices:
 - Premium finishes/recent renovation: +5-10% above comparable average
 - Good condition, modern: at comparable average
 - Dated but well-maintained: -5-10% below comparable average
 - Poor condition/needs work: -10-15% below comparable average
 ` : ''}
 
-Format your response as a clear, professional report with:
-1. Property Overview
-2. ${property.images && property.images.length > 0 ? 'Visual Assessment (detailed analysis of photos - build quality, condition, finishes, presentation)\n3. ' : ''}Market Analysis - **Comparable Sales Data:** (YOU MUST LIST THE TOP 3 SALES FROM THE DATA ABOVE WITH THEIR EXACT ADDRESSES AND PRICES - DO NOT MAKE UP ANY ADDRESSES)
-${property.images && property.images.length > 0 ? '4. ' : '3. '}RP Data & Additional Report Insights (if provided - extract key valuation data, land value, improvements value, previous sales, etc.)
-${property.images && property.images.length > 0 ? '5. ' : '4. '}Valuation Assessment (explain how you derived the value FROM THE COMPARABLE SALES)
-${property.images && property.images.length > 0 ? '6. ' : '5. '}Estimated Value Range (provide specific $ figures BASED ON THE COMPARABLE SALES DATA - your range MUST align with the comparable prices)
-${property.images && property.images.length > 0 ? '7. ' : '6. '}Key Factors Affecting Value
+FORMAT YOUR REPORT AS FOLLOWS:
 
-⚠️ REMINDER: In Section ${property.images && property.images.length > 0 ? '3' : '2'} Market Analysis, you MUST cite the EXACT addresses and prices from the comparable sales data provided. Do NOT invent addresses.
+## 1. Property Overview
+Brief description of the subject property.
 
-Be specific with dollar amounts. Your estimated value MUST be justified by and consistent with the comparable sales provided.${property.images && property.images.length > 0 ? ' Explain how the visual condition/quality affects value relative to the comparables.' : ''}`;
+${property.images && property.images.length > 0 ? `## 2. Visual Assessment
+Detailed analysis of photos - build quality, condition, finishes, presentation.
+
+## 3. Market Analysis
+**Comparable Sales Data:**
+[COPY THE TEMPLATE ABOVE - LIST ALL ${topComparables.length} PROPERTIES WITH THEIR EXACT ADDRESSES]
+
+## 4. RP Data & Additional Report Insights
+(if provided - extract key valuation data, land value, improvements value, previous sales)
+
+## 5. Valuation Assessment
+Explain how you derived the value FROM THE COMPARABLE SALES.
+
+## 6. Estimated Value Range
+Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
+
+## 7. Key Factors Affecting Value` : `## 2. Market Analysis
+**Comparable Sales Data:**
+[COPY THE TEMPLATE ABOVE - LIST ALL ${topComparables.length} PROPERTIES WITH THEIR EXACT ADDRESSES]
+
+## 3. RP Data & Additional Report Insights
+(if provided - extract key valuation data, land value, improvements value, previous sales)
+
+## 4. Valuation Assessment
+Explain how you derived the value FROM THE COMPARABLE SALES.
+
+## 5. Estimated Value Range
+Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
+
+## 6. Key Factors Affecting Value`}
+
+⚠️ CRITICAL REMINDER: Your Market Analysis section MUST include the EXACT addresses from the Historic Property Sales Data above. If you cannot find the data, state "Data unavailable" - NEVER invent addresses.`;
 
     // Build user message content - text + images if available
     type MessageContent = string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }>;

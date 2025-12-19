@@ -1,6 +1,6 @@
 "use client";
 
-import { MsalProvider, useMsal as useMsalOriginal, useIsAuthenticated as useIsAuthenticatedOriginal } from "@azure/msal-react";
+import { MsalProvider } from "@azure/msal-react";
 import { PublicClientApplication, EventType, EventMessage, AuthenticationResult, IPublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { msalConfig } from "@/lib/msalConfig";
@@ -13,49 +13,6 @@ if (typeof window !== "undefined") {
   msalInstance = new PublicClientApplication(msalConfig);
 }
 
-// Context to track if we're inside MsalProvider
-const MsalAvailableContext = createContext<boolean>(false);
-
-// Safe wrapper hooks that work during SSR and when MSAL is not available
-export const useMsalSafe = () => {
-  const isMsalAvailable = useContext(MsalAvailableContext);
-
-  // Default values when MSAL is not available
-  const defaultValue: { instance: IPublicClientApplication | null; accounts: AccountInfo[]; inProgress: string } = {
-    instance: null,
-    accounts: [],
-    inProgress: "none"
-  };
-
-  // Only call useMsalOriginal when inside MsalProvider
-  if (!isMsalAvailable) {
-    return defaultValue;
-  }
-
-  // This is safe because isMsalAvailable is stable after first render
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  try {
-    return useMsalOriginal();
-  } catch {
-    return defaultValue;
-  }
-};
-
-export const useIsAuthenticatedSafe = () => {
-  const isMsalAvailable = useContext(MsalAvailableContext);
-
-  if (!isMsalAvailable) {
-    return false;
-  }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  try {
-    return useIsAuthenticatedOriginal();
-  } catch {
-    return false;
-  }
-};
-
 // Google user type
 interface GoogleUser {
   email: string;
@@ -64,12 +21,17 @@ interface GoogleUser {
   sub: string; // Google user ID
 }
 
-// Auth context for Google
+// Unified auth context that combines both MSAL and Google auth
 interface AuthContextType {
+  // Google auth
   googleUser: GoogleUser | null;
   setGoogleUser: (user: GoogleUser | null) => void;
   isGoogleAuthenticated: boolean;
   googleLogout: () => void;
+  // MSAL auth (populated by AuthProvider, not hooks)
+  msalInstance: IPublicClientApplication | null;
+  msalAccounts: AccountInfo[];
+  isMsalAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -77,9 +39,27 @@ const AuthContext = createContext<AuthContextType>({
   setGoogleUser: () => {},
   isGoogleAuthenticated: false,
   googleLogout: () => {},
+  msalInstance: null,
+  msalAccounts: [],
+  isMsalAuthenticated: false,
 });
 
 export const useGoogleAuth = () => useContext(AuthContext);
+
+// Safe MSAL hooks that use context instead of MSAL's hooks directly
+export const useMsalSafe = () => {
+  const { msalInstance, msalAccounts } = useContext(AuthContext);
+  return {
+    instance: msalInstance,
+    accounts: msalAccounts,
+    inProgress: "none"
+  };
+};
+
+export const useIsAuthenticatedSafe = () => {
+  const { isMsalAuthenticated } = useContext(AuthContext);
+  return isMsalAuthenticated;
+};
 
 // Hook to get current user's email from either Google or Microsoft auth
 export const useUserEmail = () => {
@@ -113,6 +93,7 @@ const syncOAuthUser = async (email: string, name: string, provider: string) => {
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [googleUser, setGoogleUser] = useState<GoogleUser | null>(null);
+  const [msalAccounts, setMsalAccounts] = useState<AccountInfo[]>([]);
   const msalSyncedRef = useRef<string | null>(null);
 
   // Load Google user from localStorage on mount
@@ -152,6 +133,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       msalInstance.handleRedirectPromise().then((response) => {
         if (response && response.account) {
           msalInstance!.setActiveAccount(response.account);
+          setMsalAccounts(msalInstance!.getAllAccounts());
           // Sync Microsoft user to backend on login
           const email = response.account.username;
           const name = response.account.name || email.split('@')[0];
@@ -169,6 +151,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         if (event.eventType === EventType.LOGIN_SUCCESS && event.payload) {
           const payload = event.payload as AuthenticationResult;
           msalInstance!.setActiveAccount(payload.account);
+          setMsalAccounts(msalInstance!.getAllAccounts());
           // Sync Microsoft user to backend on login
           if (payload.account) {
             const email = payload.account.username;
@@ -183,6 +166,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
       // Check if there's already an active account
       const accounts = msalInstance.getAllAccounts();
+      setMsalAccounts(accounts);
       if (accounts.length > 0) {
         msalInstance.setActiveAccount(accounts[0]);
         // Sync existing Microsoft user (in case they're returning)
@@ -239,17 +223,16 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       setGoogleUser,
       isGoogleAuthenticated: !!googleUser,
       googleLogout,
+      msalInstance,
+      msalAccounts,
+      isMsalAuthenticated: msalAccounts.length > 0,
     }}>
       {msalInstance ? (
-        <MsalAvailableContext.Provider value={true}>
-          <MsalProvider instance={msalInstance}>
-            {children}
-          </MsalProvider>
-        </MsalAvailableContext.Provider>
-      ) : (
-        <MsalAvailableContext.Provider value={false}>
+        <MsalProvider instance={msalInstance}>
           {children}
-        </MsalAvailableContext.Provider>
+        </MsalProvider>
+      ) : (
+        children
       )}
     </AuthContext.Provider>
   );

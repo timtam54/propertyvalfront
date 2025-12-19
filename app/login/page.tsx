@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { GoogleLogin, CredentialResponse } from "@react-oauth/google";
 import { Building2 } from "lucide-react";
 import { loginRequest } from "@/lib/msalConfig";
-import { useGoogleAuth } from "@/components/AuthProvider";
+import { useMsalSafe, useIsAuthenticatedSafe, useGoogleAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 import { API } from "@/lib/config";
 
@@ -30,8 +29,8 @@ function decodeJwt(token: string) {
 
 export default function Login() {
   const router = useRouter();
-  const { instance } = useMsal();
-  const isMsalAuthenticated = useIsAuthenticated();
+  const { instance } = useMsalSafe();
+  const isMsalAuthenticated = useIsAuthenticatedSafe();
   const { isGoogleAuthenticated, setGoogleUser } = useGoogleAuth();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -43,6 +42,10 @@ export default function Login() {
 
   const handleMicrosoftLogin = async () => {
     try {
+      if (!instance) {
+        toast.error("Microsoft login is not available. Please refresh the page.");
+        return;
+      }
       await instance.loginRedirect(loginRequest);
     } catch (error) {
       console.error("Login error:", error);

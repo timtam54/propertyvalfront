@@ -11,8 +11,7 @@ import ReportUploadModal from "@/components/ReportUploadModal";
 import { PropertyQuickActions } from "@/components/PropertyActions";
 import PropertyTemplates from "@/components/PropertyTemplates";
 import BatchExport from "@/components/BatchExport";
-import { useMsal, useIsAuthenticated } from "@azure/msal-react";
-import { useGoogleAuth } from "@/components/AuthProvider";
+import { useMsalSafe, useIsAuthenticatedSafe, useGoogleAuth } from "@/components/AuthProvider";
 import { usePageView } from "@/hooks/useAudit";
 
 declare global {
@@ -74,8 +73,8 @@ interface MarketingPackage {
 
 export default function HomePage() {
   const router = useRouter();
-  const { instance, accounts } = useMsal();
-  const isMsalAuthenticated = useIsAuthenticated();
+  const { instance, accounts } = useMsalSafe();
+  const isMsalAuthenticated = useIsAuthenticatedSafe();
   const { googleUser, isGoogleAuthenticated, googleLogout } = useGoogleAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -120,10 +119,12 @@ export default function HomePage() {
     if (isGoogleAuthenticated) {
       googleLogout();
       router.push("/login");
-    } else {
+    } else if (instance) {
       instance.logoutRedirect({
         postLogoutRedirectUri: window.location.origin + "/login"
       });
+    } else {
+      router.push("/login");
     }
   };
   const [searchQuery, setSearchQuery] = useState("");

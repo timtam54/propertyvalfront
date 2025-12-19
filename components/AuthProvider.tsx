@@ -1,7 +1,7 @@
 "use client";
 
-import { MsalProvider } from "@azure/msal-react";
-import { PublicClientApplication, EventType, EventMessage, AuthenticationResult } from "@azure/msal-browser";
+import { MsalProvider, useMsal as useMsalOriginal, useIsAuthenticated as useIsAuthenticatedOriginal } from "@azure/msal-react";
+import { PublicClientApplication, EventType, EventMessage, AuthenticationResult, IPublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { msalConfig } from "@/lib/msalConfig";
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
@@ -12,6 +12,49 @@ let msalInstance: PublicClientApplication | null = null;
 if (typeof window !== "undefined") {
   msalInstance = new PublicClientApplication(msalConfig);
 }
+
+// Context to track if we're inside MsalProvider
+const MsalAvailableContext = createContext<boolean>(false);
+
+// Safe wrapper hooks that work during SSR and when MSAL is not available
+export const useMsalSafe = () => {
+  const isMsalAvailable = useContext(MsalAvailableContext);
+
+  // Default values when MSAL is not available
+  const defaultValue: { instance: IPublicClientApplication | null; accounts: AccountInfo[]; inProgress: string } = {
+    instance: null,
+    accounts: [],
+    inProgress: "none"
+  };
+
+  // Only call useMsalOriginal when inside MsalProvider
+  if (!isMsalAvailable) {
+    return defaultValue;
+  }
+
+  // This is safe because isMsalAvailable is stable after first render
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  try {
+    return useMsalOriginal();
+  } catch {
+    return defaultValue;
+  }
+};
+
+export const useIsAuthenticatedSafe = () => {
+  const isMsalAvailable = useContext(MsalAvailableContext);
+
+  if (!isMsalAvailable) {
+    return false;
+  }
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  try {
+    return useIsAuthenticatedOriginal();
+  } catch {
+    return false;
+  }
+};
 
 // Google user type
 interface GoogleUser {
@@ -198,11 +241,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       googleLogout,
     }}>
       {msalInstance ? (
-        <MsalProvider instance={msalInstance}>
-          {children}
-        </MsalProvider>
+        <MsalAvailableContext.Provider value={true}>
+          <MsalProvider instance={msalInstance}>
+            {children}
+          </MsalProvider>
+        </MsalAvailableContext.Provider>
       ) : (
-        children
+        <MsalAvailableContext.Provider value={false}>
+          {children}
+        </MsalAvailableContext.Provider>
       )}
     </AuthContext.Provider>
   );

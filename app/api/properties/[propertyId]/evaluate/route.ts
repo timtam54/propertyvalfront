@@ -569,39 +569,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const property: Property = await propertyResponse.json();
     console.log(`[Evaluate] Got property: ${property.location}`);
 
-    // Fetch historic sales from the same endpoint used by the UI
-    // This ensures consistency - the AI sees the same data shown on the page
-    console.log(`[Evaluate] Fetching historic sales for property ${propertyId}...`);
+    // Scrape historic sales directly from Homely (same logic as historic-sales endpoint)
+    // This avoids self-referencing HTTP calls which can fail on Azure
+    console.log(`[Evaluate] Scraping historic sales for property...`);
 
-    let historicSalesData: any = null;
+    let historicSalesData: { sales: SoldProperty[] } = { sales: [] };
     try {
-      // Use request URL to determine base URL - most reliable across all environments
-      const requestUrl = new URL(request.url);
-      const baseUrl = `${requestUrl.protocol}//${requestUrl.host}`;
-      console.log(`[Evaluate] Using base URL: ${baseUrl}`);
+      const { suburb, state, postcode } = parseLocation(property.location);
+      const propertyTypeFilter = property.property_type ? getPropertyTypeFilter(property.property_type) : null;
 
-      const historicSalesResponse = await fetch(`${baseUrl}/api/properties/${propertyId}/historic-sales`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      console.log(`[Evaluate] Scraping Homely for: ${suburb}, ${state}, ${postcode}, type: ${propertyTypeFilter}`);
 
-      console.log(`[Evaluate] Historic sales response status: ${historicSalesResponse.status}`);
+      const scrapedSales = await scrapeHomelyProperties(suburb, state, postcode, propertyTypeFilter);
+      console.log(`[Evaluate] Scraped ${scrapedSales.length} sales from Homely`);
 
-      if (historicSalesResponse.ok) {
-        historicSalesData = await historicSalesResponse.json();
-        console.log(`[Evaluate] Got ${historicSalesData.sales?.length || 0} historic sales, best_match: ${historicSalesData.best_match?.address || 'none'}`);
-      } else {
-        const errorText = await historicSalesResponse.text();
-        console.log(`[Evaluate] Historic sales fetch failed: ${historicSalesResponse.status} - ${errorText}`);
-      }
+      historicSalesData.sales = scrapedSales;
     } catch (err) {
-      console.log(`[Evaluate] Error fetching historic sales:`, err);
+      console.log(`[Evaluate] Error scraping historic sales:`, err);
     }
 
-    // Convert historic sales to our SoldProperty format and calculate similarity scores
-    // (The historic-sales API doesn't return scores - they're calculated client-side in HistoricSalesCard)
+    // Calculate similarity scores and distances for the scraped sales
     let soldProperties: SoldProperty[] = [];
-    if (historicSalesData?.sales) {
+    if (historicSalesData.sales && historicSalesData.sales.length > 0) {
       // First, geocode the property if we don't have coordinates
       let propertyLat = property.latitude;
       let propertyLng = property.longitude;
@@ -614,14 +603,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      soldProperties = historicSalesData.sales.map((sale: any) => {
-        // Calculate distance if we have coordinates
-        let distance_km: number | null = null;
-        if (propertyLat && propertyLng && sale.latitude && sale.longitude) {
-          distance_km = calculateDistance(propertyLat, propertyLng, sale.latitude, sale.longitude);
+      // Geocode each sale and calculate similarity
+      for (const sale of historicSalesData.sales) {
+        // Geocode sale address if needed
+        let saleLat = sale.latitude;
+        let saleLng = sale.longitude;
+        if (!saleLat || !saleLng) {
+          const saleCoords = await geocodeAddress(sale.address);
+          if (saleCoords) {
+            saleLat = saleCoords.lat;
+            saleLng = saleCoords.lng;
+          }
         }
 
-        // Calculate similarity score (same logic as HistoricSalesCard)
+        // Calculate distance if we have coordinates
+        let distance_km: number | null = null;
+        if (propertyLat && propertyLng && saleLat && saleLng) {
+          distance_km = calculateDistance(propertyLat, propertyLng, saleLat, saleLng);
+        }
+
+        // Calculate similarity score
         const bedDiff = Math.abs((property.beds || 3) - (sale.beds || 3));
         const bathDiff = Math.abs((property.baths || 2) - (sale.baths || 2));
 
@@ -690,27 +691,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // Clamp similarity to 0-100
         similarity = Math.max(0, Math.min(100, similarity));
 
-        return {
-          id: sale.id || crypto.randomUUID(),
-          address: sale.address,
-          price: sale.price,
-          beds: sale.beds,
-          baths: sale.baths,
-          cars: sale.cars,
-          land_area: sale.land_area,
-          property_type: sale.property_type || 'house',
-          sold_date: sale.sold_date,
-          sold_date_raw: sale.sold_date_raw ? new Date(sale.sold_date_raw) : null,
-          source: sale.source || 'homely.com.au',
+        soldProperties.push({
+          ...sale,
           similarity_score: similarity,
-          latitude: sale.latitude,
-          longitude: sale.longitude,
+          latitude: saleLat,
+          longitude: saleLng,
           distance_km: distance_km,
-        };
-      });
+        });
+      }
 
-      // Sort by similarity score (highest first) - this is the key fix!
+      // Sort by similarity score (highest first)
       soldProperties.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
+
+      console.log(`[Evaluate] Processed ${soldProperties.length} sales with similarity scores`);
+    } else {
+      console.log(`[Evaluate] WARNING: No historic sales data available!`);
     }
 
     console.log(`[Evaluate] Using ${soldProperties.length} historic sales for valuation`);

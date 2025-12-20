@@ -265,6 +265,8 @@ export interface HistoricSalesWeights {
   density_house_to_subdivision_penalty: number;
 
   // Distance-based adjustments (in km)
+  distance_ultra_close_bonus: number;
+  distance_ultra_close_threshold_km: number;
   distance_very_close_bonus: number;
   distance_very_close_threshold_km: number;
   distance_close_bonus: number;

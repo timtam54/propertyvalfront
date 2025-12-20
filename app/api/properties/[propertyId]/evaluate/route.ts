@@ -317,31 +317,26 @@ function calculateSimilarity(
 
   // Distance penalty - proximity is important!
   if (comparable.distance_km != null) {
-    if (comparable.distance_km < 0.25) {
-      // Very close (< 250m) - big bonus
-      score = Math.min(100, score + 35);
+    if (comparable.distance_km < 0.2) {
+      // Ultra close (< 200m) - big bonus
+      score = Math.min(100, score + 40);
+    } else if (comparable.distance_km < 0.35) {
+      // Very close (200-350m) - good bonus
+      score = Math.min(100, score + 30);
     } else if (comparable.distance_km < 0.5) {
-      // Close (250-500m) - good bonus
+      // Close (350-500m) - bonus
       score = Math.min(100, score + 15);
-    } else if (comparable.distance_km < 1) {
-      // Near (500m - 1km) - small bonus
-      score = Math.min(100, score + 5);
-    } else if (comparable.distance_km > 10) {
-      // Very far (> 10km) - severe penalty
-      score -= 40;
     } else if (comparable.distance_km > 5) {
-      // Far (5-10km) - big penalty
+      // Very far (> 5km) - severe penalty
       score -= 25;
-    } else if (comparable.distance_km > 3) {
-      // Moderate (3-5km) - medium penalty
-      score -= 15;
     } else if (comparable.distance_km > 2) {
-      // Slight distance (2-3km) - small penalty
-      score -= 10;
+      // Far (2-5km) - big penalty
+      score -= 15;
     } else if (comparable.distance_km > 1) {
-      // 1-2km - small penalty (not ideal)
-      score -= 5;
+      // Moderate (1-2km) - small penalty
+      score -= 8;
     }
+    // 500m - 1km: no adjustment
   }
 
   // RECENCY penalty - recent sales are much more valuable!

@@ -24,7 +24,12 @@ export default function HistoricSalesWeightsPage() {
       const response = await fetch('/api/historic-sales-weights');
       const data = await response.json();
       if (response.ok) {
-        setWeights(data);
+        // Add fallback defaults for new fields that might not exist in DB yet
+        setWeights({
+          ...data,
+          distance_ultra_close_bonus: data.distance_ultra_close_bonus ?? 40,
+          distance_ultra_close_threshold_km: data.distance_ultra_close_threshold_km ?? 0.2,
+        });
       } else {
         toast.error('Failed to load weights configuration');
       }
@@ -338,8 +343,33 @@ export default function HistoricSalesWeightsPage() {
           <div style={fieldGroupStyle}>
             <div style={fieldStyle}>
               <div>
-                <label style={labelStyle}>Very Close Bonus</label>
-                <p style={descStyle}>Bonus for properties very close</p>
+                <label style={labelStyle}>Ultra Close Bonus (0 - {weights.distance_ultra_close_threshold_km * 1000}m)</label>
+                <p style={descStyle}>Bonus for properties within {weights.distance_ultra_close_threshold_km * 1000}m</p>
+              </div>
+              <input
+                type="number"
+                style={inputStyle}
+                value={weights.distance_ultra_close_bonus}
+                onChange={(e) => handleInputChange('distance_ultra_close_bonus', e.target.value)}
+              />
+            </div>
+            <div style={fieldStyle}>
+              <div>
+                <label style={labelStyle}>Ultra Close Threshold (km)</label>
+                <p style={descStyle}>Distance for ultra close (default 0.2 = 200m)</p>
+              </div>
+              <input
+                type="number"
+                step="0.05"
+                style={inputStyle}
+                value={weights.distance_ultra_close_threshold_km}
+                onChange={(e) => handleInputChange('distance_ultra_close_threshold_km', e.target.value)}
+              />
+            </div>
+            <div style={fieldStyle}>
+              <div>
+                <label style={labelStyle}>Very Close Bonus ({weights.distance_ultra_close_threshold_km * 1000}m - {weights.distance_very_close_threshold_km * 1000}m)</label>
+                <p style={descStyle}>Bonus for properties in this range</p>
               </div>
               <input
                 type="number"
@@ -351,11 +381,11 @@ export default function HistoricSalesWeightsPage() {
             <div style={fieldStyle}>
               <div>
                 <label style={labelStyle}>Very Close Threshold (km)</label>
-                <p style={descStyle}>Distance considered very close</p>
+                <p style={descStyle}>Upper limit for very close (default 0.35 = 350m)</p>
               </div>
               <input
                 type="number"
-                step="0.1"
+                step="0.05"
                 style={inputStyle}
                 value={weights.distance_very_close_threshold_km}
                 onChange={(e) => handleInputChange('distance_very_close_threshold_km', e.target.value)}
@@ -363,8 +393,8 @@ export default function HistoricSalesWeightsPage() {
             </div>
             <div style={fieldStyle}>
               <div>
-                <label style={labelStyle}>Close Bonus</label>
-                <p style={descStyle}>Bonus for close properties</p>
+                <label style={labelStyle}>Close Bonus ({weights.distance_very_close_threshold_km * 1000}m - {weights.distance_close_threshold_km * 1000}m)</label>
+                <p style={descStyle}>Bonus for properties in this range</p>
               </div>
               <input
                 type="number"
@@ -376,7 +406,7 @@ export default function HistoricSalesWeightsPage() {
             <div style={fieldStyle}>
               <div>
                 <label style={labelStyle}>Close Threshold (km)</label>
-                <p style={descStyle}>Distance considered close</p>
+                <p style={descStyle}>Upper limit for close (default 0.5 = 500m)</p>
               </div>
               <input
                 type="number"
@@ -388,8 +418,8 @@ export default function HistoricSalesWeightsPage() {
             </div>
             <div style={fieldStyle}>
               <div>
-                <label style={labelStyle}>Moderate Penalty</label>
-                <p style={descStyle}>Penalty for moderate distance</p>
+                <label style={labelStyle}>Moderate Penalty ({weights.distance_close_threshold_km * 1000}m - {weights.distance_moderate_threshold_km}km)</label>
+                <p style={descStyle}>Penalty for properties in this range</p>
               </div>
               <input
                 type="number"
@@ -401,7 +431,7 @@ export default function HistoricSalesWeightsPage() {
             <div style={fieldStyle}>
               <div>
                 <label style={labelStyle}>Moderate Threshold (km)</label>
-                <p style={descStyle}>Distance considered moderate</p>
+                <p style={descStyle}>Upper limit for moderate distance</p>
               </div>
               <input
                 type="number"
@@ -413,8 +443,8 @@ export default function HistoricSalesWeightsPage() {
             </div>
             <div style={fieldStyle}>
               <div>
-                <label style={labelStyle}>Far Penalty</label>
-                <p style={descStyle}>Penalty for far properties</p>
+                <label style={labelStyle}>Far Penalty ({weights.distance_moderate_threshold_km}km - {weights.distance_far_threshold_km}km)</label>
+                <p style={descStyle}>Penalty for properties in this range</p>
               </div>
               <input
                 type="number"
@@ -426,7 +456,7 @@ export default function HistoricSalesWeightsPage() {
             <div style={fieldStyle}>
               <div>
                 <label style={labelStyle}>Far Threshold (km)</label>
-                <p style={descStyle}>Distance considered far</p>
+                <p style={descStyle}>Upper limit for far distance</p>
               </div>
               <input
                 type="number"
@@ -438,8 +468,8 @@ export default function HistoricSalesWeightsPage() {
             </div>
             <div style={fieldStyle}>
               <div>
-                <label style={labelStyle}>Very Far Penalty</label>
-                <p style={descStyle}>Penalty for very far properties</p>
+                <label style={labelStyle}>Very Far Penalty (&gt; {weights.distance_very_far_threshold_km}km)</label>
+                <p style={descStyle}>Penalty for properties beyond {weights.distance_very_far_threshold_km}km</p>
               </div>
               <input
                 type="number"

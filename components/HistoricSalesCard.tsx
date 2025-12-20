@@ -252,14 +252,16 @@ export default function HistoricSalesCard({
       bathroom_diff_penalty_per_bath: 20,
       density_house_to_unit_penalty: 40,
       density_house_to_subdivision_penalty: 20,
-      distance_very_close_bonus: 35,
-      distance_very_close_threshold_km: 0.25,
+      distance_ultra_close_bonus: 40,
+      distance_ultra_close_threshold_km: 0.2,
+      distance_very_close_bonus: 30,
+      distance_very_close_threshold_km: 0.35,
       distance_close_bonus: 15,
       distance_close_threshold_km: 0.5,
       distance_moderate_penalty: 8,
-      distance_moderate_threshold_km: 2,
+      distance_moderate_threshold_km: 1,
       distance_far_penalty: 15,
-      distance_far_threshold_km: 3,
+      distance_far_threshold_km: 2,
       distance_very_far_penalty: 25,
       distance_very_far_threshold_km: 5,
       recency_very_recent_bonus: 10,
@@ -329,11 +331,14 @@ export default function HistoricSalesCard({
       );
 
       // Apply distance-based score adjustment using configurable thresholds
-      if (distance < w.distance_very_close_threshold_km) {
-        // Very close - bonus
+      if (distance < w.distance_ultra_close_threshold_km) {
+        // Ultra close (<200m) - big bonus
+        similarity += w.distance_ultra_close_bonus;
+      } else if (distance < w.distance_very_close_threshold_km) {
+        // Very close (200-350m) - good bonus
         similarity += w.distance_very_close_bonus;
       } else if (distance < w.distance_close_threshold_km) {
-        // Close - small bonus
+        // Close (350-500m) - small bonus
         similarity += w.distance_close_bonus;
       } else if (distance > w.distance_very_far_threshold_km) {
         // Very far - big penalty

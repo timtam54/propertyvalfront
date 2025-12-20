@@ -132,6 +132,10 @@ export default function PropertyEvaluationPage() {
   const [recalculating, setRecalculating] = useState(false);
   const [selectedComparableIds, setSelectedComparableIds] = useState<string[]>([]);
 
+  // State for historic sales data from HistoricSalesCard
+  // This is the SINGLE SOURCE OF TRUTH for comparable sales - no duplicate logic!
+  const [historicSalesData, setHistoricSalesData] = useState<any[]>([]);
+
   // Initialize selected comparables when property loads
   useEffect(() => {
     if (property?.selected_comparables) {
@@ -192,9 +196,13 @@ export default function PropertyEvaluationPage() {
 
     try {
       // Use local API route for web scraping evaluation
+      // PASS THE HISTORIC SALES DATA from HistoricSalesCard to ensure consistency
       const response = await fetch(`/api/properties/${propertyId}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          historicSales: historicSalesData, // Pass the pre-calculated data from HistoricSalesCard
+        }),
       });
 
       if (!response.ok) {
@@ -990,6 +998,7 @@ export default function PropertyEvaluationPage() {
                 variant="purple"
                 maxItems={15}
                 showSourceLink={true}
+                onSalesProcessed={setHistoricSalesData}
               />
             </div>
 

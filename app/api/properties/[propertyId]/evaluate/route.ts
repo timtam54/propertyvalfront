@@ -569,143 +569,80 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const property: Property = await propertyResponse.json();
     console.log(`[Evaluate] Got property: ${property.location}`);
 
-    // Scrape historic sales directly from Homely (same logic as historic-sales endpoint)
-    // This avoids self-referencing HTTP calls which can fail on Azure
-    console.log(`[Evaluate] Scraping historic sales for property...`);
-
-    let historicSalesData: { sales: SoldProperty[] } = { sales: [] };
+    // Check if pre-calculated historic sales were passed in the request body
+    // This allows the frontend to pass the SAME data that HistoricSalesCard displays
+    let requestBody: { historicSales?: any[] } = {};
     try {
-      const { suburb, state, postcode } = parseLocation(property.location);
-      const propertyTypeFilter = property.property_type ? getPropertyTypeFilter(property.property_type) : null;
-
-      console.log(`[Evaluate] Scraping Homely for: ${suburb}, ${state}, ${postcode}, type: ${propertyTypeFilter}`);
-
-      const scrapedSales = await scrapeHomelyProperties(suburb, state, postcode, propertyTypeFilter);
-      console.log(`[Evaluate] Scraped ${scrapedSales.length} sales from Homely`);
-
-      historicSalesData.sales = scrapedSales;
-    } catch (err) {
-      console.log(`[Evaluate] Error scraping historic sales:`, err);
+      requestBody = await request.json();
+    } catch {
+      // No body or invalid JSON - that's fine, we'll fetch fresh
     }
 
-    // Calculate similarity scores and distances for the scraped sales
     let soldProperties: SoldProperty[] = [];
-    if (historicSalesData.sales && historicSalesData.sales.length > 0) {
-      // First, geocode the property if we don't have coordinates
-      let propertyLat = property.latitude;
-      let propertyLng = property.longitude;
 
-      if (!propertyLat || !propertyLng) {
-        const coords = await geocodeAddress(property.location);
-        if (coords) {
-          propertyLat = coords.lat;
-          propertyLng = coords.lng;
-        }
-      }
-
-      // Geocode each sale and calculate similarity
-      for (const sale of historicSalesData.sales) {
-        // Geocode sale address if needed
-        let saleLat = sale.latitude;
-        let saleLng = sale.longitude;
-        if (!saleLat || !saleLng) {
-          const saleCoords = await geocodeAddress(sale.address);
-          if (saleCoords) {
-            saleLat = saleCoords.lat;
-            saleLng = saleCoords.lng;
-          }
-        }
-
-        // Calculate distance if we have coordinates
-        let distance_km: number | null = null;
-        if (propertyLat && propertyLng && saleLat && saleLng) {
-          distance_km = calculateDistance(propertyLat, propertyLng, saleLat, saleLng);
-        }
-
-        // Calculate similarity score
-        const bedDiff = Math.abs((property.beds || 3) - (sale.beds || 3));
-        const bathDiff = Math.abs((property.baths || 2) - (sale.baths || 2));
-
-        let similarity = 100;
-
-        // Bedroom penalty (25 points per bedroom difference)
-        similarity -= bedDiff * 25;
-
-        // Bathroom penalty (20 points per bathroom difference)
-        similarity -= bathDiff * 20;
-
-        // Density type check
-        const targetDensity = getPropertyDensityType(property.location, property.property_type);
-        const saleDensity = getPropertyDensityType(sale.address, sale.property_type);
-
-        if (targetDensity !== saleDensity) {
-          if ((targetDensity === 'house' && saleDensity === 'unit') ||
-              (targetDensity === 'unit' && saleDensity === 'house')) {
-            similarity -= 40; // Big mismatch
-          } else {
-            similarity -= 20; // Medium mismatch
-          }
-        }
-
-        // Distance scoring
-        if (distance_km != null) {
-          if (distance_km < 0.5) {
-            similarity += 10; // Very close bonus
-          } else if (distance_km < 1) {
-            similarity += 5; // Close bonus
-          } else if (distance_km > 5) {
-            similarity -= 25; // Very far penalty
-          } else if (distance_km > 3) {
-            similarity -= 15; // Far penalty
-          } else if (distance_km > 2) {
-            similarity -= 8; // Moderate penalty
-          }
-        }
-
-        // Recency scoring
-        let saleDate: Date | null = sale.sold_date_raw ? new Date(sale.sold_date_raw) : null;
-        if (!saleDate && sale.sold_date && sale.sold_date !== 'Recently') {
-          const parsed = new Date(sale.sold_date);
-          if (!isNaN(parsed.getTime())) {
-            saleDate = parsed;
-          }
-        }
-
-        if (saleDate && !isNaN(saleDate.getTime())) {
-          const now = new Date();
-          const monthsAgo = (now.getFullYear() - saleDate.getFullYear()) * 12 + (now.getMonth() - saleDate.getMonth());
-
-          if (monthsAgo <= 3) {
-            similarity += 10; // Very recent bonus
-          } else if (monthsAgo <= 6) {
-            similarity += 5; // Recent bonus
-          } else if (monthsAgo > 24) {
-            similarity -= 20; // Very old penalty
-          } else if (monthsAgo > 18) {
-            similarity -= 10; // Old penalty
-          } else if (monthsAgo > 12) {
-            similarity -= 5; // Getting old penalty
-          }
-        }
-
-        // Clamp similarity to 0-100
-        similarity = Math.max(0, Math.min(100, similarity));
-
-        soldProperties.push({
-          ...sale,
-          similarity_score: similarity,
-          latitude: saleLat,
-          longitude: saleLng,
-          distance_km: distance_km,
-        });
-      }
-
-      // Sort by similarity score (highest first)
+    if (requestBody.historicSales && requestBody.historicSales.length > 0) {
+      // USE PRE-CALCULATED DATA FROM FRONTEND (same as HistoricSalesCard)
+      console.log(`[Evaluate] Using ${requestBody.historicSales.length} pre-calculated sales from frontend`);
+      soldProperties = requestBody.historicSales.map((s: any) => ({
+        id: s.id || crypto.randomUUID(),
+        address: s.address,
+        price: s.price,
+        beds: s.beds,
+        baths: s.baths,
+        cars: s.cars,
+        land_area: s.land_area,
+        property_type: s.property_type,
+        sold_date: s.sold_date,
+        sold_date_raw: s.sold_date_raw ? new Date(s.sold_date_raw) : null,
+        source: s.source || 'homely.com.au',
+        similarity_score: s.similarity, // Use the pre-calculated similarity from HistoricSalesCard
+        latitude: s.latitude,
+        longitude: s.longitude,
+        distance_km: s.distance,
+      }));
+      // Already sorted by frontend, but sort again just in case
       soldProperties.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
-
-      console.log(`[Evaluate] Processed ${soldProperties.length} sales with similarity scores`);
     } else {
-      console.log(`[Evaluate] WARNING: No historic sales data available!`);
+      // FALLBACK: Scrape fresh data if no pre-calculated data provided
+      console.log(`[Evaluate] No pre-calculated data - scraping fresh from Homely...`);
+
+      try {
+        const { suburb, state, postcode } = parseLocation(property.location);
+        const propertyTypeFilter = property.property_type ? getPropertyTypeFilter(property.property_type) : null;
+
+        console.log(`[Evaluate] Scraping Homely for: ${suburb}, ${state}, ${postcode}, type: ${propertyTypeFilter}`);
+
+        const scrapedSales = await scrapeHomelyProperties(suburb, state, postcode, propertyTypeFilter);
+        console.log(`[Evaluate] Scraped ${scrapedSales.length} sales from Homely`);
+
+        // Simple similarity calculation for fallback (without weights API)
+        const propertyLat = property.latitude;
+        const propertyLng = property.longitude;
+
+        for (const sale of scrapedSales) {
+          let distance_km: number | null = null;
+          if (propertyLat && propertyLng && sale.latitude && sale.longitude) {
+            distance_km = calculateDistance(propertyLat, propertyLng, sale.latitude, sale.longitude);
+          }
+
+          const bedDiff = Math.abs((property.beds || 3) - (sale.beds || 3));
+          const bathDiff = Math.abs((property.baths || 2) - (sale.baths || 2));
+          let similarity = 100 - (bedDiff * 25) - (bathDiff * 20);
+          if (distance_km != null && distance_km < 0.5) similarity += 10;
+          if (distance_km != null && distance_km < 1) similarity += 5;
+          similarity = Math.max(0, Math.min(100, similarity));
+
+          soldProperties.push({
+            ...sale,
+            similarity_score: similarity,
+            distance_km: distance_km,
+          });
+        }
+
+        soldProperties.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
+      } catch (err) {
+        console.log(`[Evaluate] Error scraping historic sales:`, err);
+      }
     }
 
     console.log(`[Evaluate] Using ${soldProperties.length} historic sales for valuation`);

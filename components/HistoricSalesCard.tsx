@@ -62,6 +62,23 @@ interface HistoricSalesCardProps {
   maxItems?: number;
   // Show source link
   showSourceLink?: boolean;
+  // Callback to expose processed sales data (with similarity scores)
+  onSalesProcessed?: (processedSales: Array<{
+    id: string;
+    address: string;
+    price: number;
+    beds: number | null;
+    baths: number | null;
+    cars: number | null;
+    land_area: number | null;
+    property_type: string;
+    sold_date: string;
+    sold_date_raw?: string | Date | null;
+    similarity: number;
+    distance: number | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }>) => void;
 }
 
 /**
@@ -132,6 +149,7 @@ export default function HistoricSalesCard({
   variant = 'purple',
   maxItems = 20,
   showSourceLink = true,
+  onSalesProcessed,
 }: HistoricSalesCardProps) {
   const [sales, setSales] = useState<HistoricSale[]>(initialSales || []);
   const [loading, setLoading] = useState(!initialSales);
@@ -420,6 +438,33 @@ export default function HistoricSalesCard({
     { value: 'baths', label: 'Bathrooms' },
     { value: 'size', label: 'Land Size' },
   ];
+
+  // Call onSalesProcessed callback whenever processedSales changes
+  // This allows parent components to use the same processed data
+  useEffect(() => {
+    if (onSalesProcessed && processedSales.length > 0) {
+      // Sort by similarity (best match first) for the callback
+      const sortedForCallback = [...processedSales]
+        .sort((a, b) => b.similarity - a.similarity)
+        .map(s => ({
+          id: s.id,
+          address: s.address,
+          price: s.price,
+          beds: s.beds,
+          baths: s.baths,
+          cars: s.cars,
+          land_area: s.land_area,
+          property_type: s.property_type,
+          sold_date: s.sold_date,
+          sold_date_raw: s.sold_date_raw,
+          similarity: s.similarity,
+          distance: s.distance,
+          latitude: s.latitude,
+          longitude: s.longitude,
+        }));
+      onSalesProcessed(sortedForCallback);
+    }
+  }, [processedSales, onSalesProcessed]);
 
   // Initialize Google Map when viewMode changes to 'map'
   useEffect(() => {

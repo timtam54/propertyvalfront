@@ -867,7 +867,22 @@ ${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${proper
 `;
     }
 
+    // Calculate max reasonable value (highest comparable + 15% max)
+    const maxComparablePrice = comparables.length > 0 ? Math.max(...comparables.map(c => c.price)) : 0;
+    const minComparablePrice = comparables.length > 0 ? Math.min(...comparables.map(c => c.price)) : 0;
+    const maxReasonableValue = Math.round(maxComparablePrice * 1.15);
+    const avgComparablePrice = comparables.length > 0 ? Math.round(comparables.reduce((sum, c) => sum + c.price, 0) / comparables.length) : 0;
+
     const systemPrompt = `You are an expert Australian property valuer with expertise in assessing property condition and build quality from photos.
+
+⚠️⚠️⚠️ CRITICAL VALUATION CONSTRAINTS ⚠️⚠️⚠️
+1. Your valuation MUST be grounded in the comparable sales data provided
+2. The comparable sales range from ${formatPrice(minComparablePrice)} to ${formatPrice(maxComparablePrice)}
+3. Your estimated value CANNOT exceed ${formatPrice(maxReasonableValue)} (highest comparable + 15%) unless you provide EXCEPTIONAL justification
+4. The average comparable price is ${formatPrice(avgComparablePrice)} - your estimate should be NEAR this unless there are clear differences
+5. A property with LESS land area than comparables should be valued LOWER, not higher
+6. Time adjustments: ~5% per year maximum (not more)
+7. Quality/condition adjustments: -10% to +10% maximum (not more)
 
 ⚠️⚠️⚠️ ABSOLUTE REQUIREMENT - YOU MUST FOLLOW THIS ⚠️⚠️⚠️
 In the Market Analysis section, you MUST copy the EXACT addresses and prices from the Historic Property Sales data provided below.
@@ -921,10 +936,15 @@ Detailed analysis of photos - build quality, condition, finishes, presentation.
 (if provided - extract key valuation data, land value, improvements value, previous sales)
 
 ## 5. Valuation Assessment
-Explain how you derived the value FROM THE COMPARABLE SALES.
+Explain step-by-step how you derived the value:
+- Start with the most relevant comparable sale price
+- Show each adjustment (land size, time, quality) with dollar amounts
+- Explain why your final value is higher/lower than comparables
 
 ## 6. Estimated Value Range
 Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
+Your estimate MUST be justified by the comparables - if the best match sold for $X, explain why you are valuing above/below $X.
+Remember: Maximum reasonable value is ${formatPrice(maxReasonableValue)} (highest comparable + 15%).
 
 ## 7. Key Factors Affecting Value` : `## 2. Market Analysis
 **Comparable Sales Data:**
@@ -934,10 +954,15 @@ Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
 (if provided - extract key valuation data, land value, improvements value, previous sales)
 
 ## 4. Valuation Assessment
-Explain how you derived the value FROM THE COMPARABLE SALES.
+Explain step-by-step how you derived the value:
+- Start with the most relevant comparable sale price
+- Show each adjustment (land size, time, quality) with dollar amounts
+- Explain why your final value is higher/lower than comparables
 
 ## 5. Estimated Value Range
 Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
+Your estimate MUST be justified by the comparables - if the best match sold for $X, explain why you are valuing above/below $X.
+Remember: Maximum reasonable value is highest comparable + 15%.
 
 ## 6. Key Factors Affecting Value`}
 

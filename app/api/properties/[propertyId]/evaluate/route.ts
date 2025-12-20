@@ -317,12 +317,12 @@ function calculateSimilarity(
 
   // Distance penalty - proximity is important!
   if (comparable.distance_km != null) {
-    if (comparable.distance_km < 0.3) {
-      // Very close (< 300m) - good bonus
-      score = Math.min(100, score + 15);
+    if (comparable.distance_km < 0.25) {
+      // Very close (< 250m) - big bonus
+      score = Math.min(100, score + 35);
     } else if (comparable.distance_km < 0.5) {
-      // Close (300-500m) - bonus
-      score = Math.min(100, score + 10);
+      // Close (250-500m) - good bonus
+      score = Math.min(100, score + 15);
     } else if (comparable.distance_km < 1) {
       // Near (500m - 1km) - small bonus
       score = Math.min(100, score + 5);

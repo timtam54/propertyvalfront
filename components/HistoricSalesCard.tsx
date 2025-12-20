@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Bed, Bath, Car, Ruler, Home, Loader2, MapPin } from 'lucide-react';
+import { Bed, Bath, Car, Ruler, Home, Loader2, MapPin, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { HistoricSalesWeights } from '@/lib/types';
 
@@ -36,6 +36,7 @@ interface HistoricSalesCardProps {
   propertyType?: string | null;
   propertyBeds: number;
   propertyBaths: number;
+  propertyLandArea?: number | null; // Land area in sqm
   propertyLatitude?: number | null;
   propertyLongitude?: number | null;
   // Optional: pass pre-fetched data
@@ -142,6 +143,7 @@ export default function HistoricSalesCard({
   propertyType,
   propertyBeds,
   propertyBaths,
+  propertyLandArea,
   propertyLatitude,
   propertyLongitude,
   initialSales,
@@ -159,6 +161,7 @@ export default function HistoricSalesCard({
   const [sortBy, setSortBy] = useState<'match' | 'distance' | 'beds' | 'baths' | 'size' | 'recent'>('match');
   const [viewMode, setViewMode] = useState<'table' | 'map'>('table');
   const [weights, setWeights] = useState<HistoricSalesWeights | null>(null);
+  const [copied, setCopied] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
@@ -191,6 +194,19 @@ export default function HistoricSalesCard({
     setLoading(true);
     setError(null);
     try {
+      // Also refresh weights when forcing fresh data
+      if (forceFresh) {
+        try {
+          const weightsResponse = await fetch('/api/historic-sales-weights');
+          if (weightsResponse.ok) {
+            const weightsData = await weightsResponse.json();
+            setWeights(weightsData);
+          }
+        } catch (err) {
+          console.error('Error refreshing weights:', err);
+        }
+      }
+
       const url = `/api/properties/${propertyId}/historic-sales${forceFresh ? '?fresh=true' : ''}`;
       const response = await fetch(url);
       const data = await response.json();
@@ -256,6 +272,9 @@ export default function HistoricSalesCard({
       recency_old_threshold_months: 18,
       recency_very_old_penalty: 20,
       recency_very_old_threshold_months: 24,
+      // Land area matching - high weight because land size is critical for accurate comparisons
+      land_area_weight: 30, // Max penalty/bonus for land area difference
+      land_area_tolerance_percent: 20, // Within 20% is considered a good match
     };
 
     // Calculate similarity score using configurable weights
@@ -370,6 +389,34 @@ export default function HistoricSalesCard({
       // Between recent and getting_old thresholds: no adjustment
     }
 
+    // Apply land area scoring - this is critical for accurate comparisons
+    // If both properties have land area, compare them
+    let landAreaMatch = false;
+    if (propertyLandArea && propertyLandArea > 0 && sale.land_area && sale.land_area > 0) {
+      const landDiffPercent = Math.abs(propertyLandArea - sale.land_area) / propertyLandArea * 100;
+
+      if (landDiffPercent <= w.land_area_tolerance_percent) {
+        // Within tolerance - good match, small bonus
+        similarity += w.land_area_weight * 0.3; // e.g., +9 points for 30 weight
+        landAreaMatch = true;
+      } else if (landDiffPercent <= w.land_area_tolerance_percent * 2) {
+        // Slightly outside tolerance - small penalty
+        similarity -= w.land_area_weight * 0.3;
+      } else if (landDiffPercent <= w.land_area_tolerance_percent * 3) {
+        // Moderately different - medium penalty
+        similarity -= w.land_area_weight * 0.6;
+      } else {
+        // Very different land sizes - big penalty
+        similarity -= w.land_area_weight;
+      }
+    } else if (sale.land_area && sale.land_area > 0 && (!propertyLandArea || propertyLandArea === 0)) {
+      // Subject property has no land area but comparable does - can't penalize, but note it
+      // No penalty applied
+    } else if (propertyLandArea && propertyLandArea > 0 && (!sale.land_area || sale.land_area === 0)) {
+      // Subject property has land area but comparable doesn't - small penalty for missing data
+      similarity -= w.land_area_weight * 0.2;
+    }
+
     // Clamp similarity to 0-100 range
     similarity = Math.max(0, Math.min(100, similarity));
 
@@ -378,7 +425,8 @@ export default function HistoricSalesCard({
       sale.baths === propertyBaths &&
       targetDensity === saleDensity &&
       (distance == null || distance < w.distance_moderate_threshold_km) && // Only exact match if within moderate distance
-      (monthsAgo == null || monthsAgo <= w.recency_getting_old_threshold_months); // Only exact match if sold recently
+      (monthsAgo == null || monthsAgo <= w.recency_getting_old_threshold_months) && // Only exact match if sold recently
+      (landAreaMatch || !propertyLandArea); // Only exact match if land area matches (or subject has no land area)
 
     return {
       ...sale,
@@ -439,32 +487,128 @@ export default function HistoricSalesCard({
     { value: 'size', label: 'Land Size' },
   ];
 
-  // Call onSalesProcessed callback whenever processedSales changes
-  // This allows parent components to use the same processed data
-  useEffect(() => {
-    if (onSalesProcessed && processedSales.length > 0) {
-      // Sort by similarity (best match first) for the callback
-      const sortedForCallback = [...processedSales]
-        .sort((a, b) => b.similarity - a.similarity)
-        .map(s => ({
-          id: s.id,
-          address: s.address,
-          price: s.price,
-          beds: s.beds,
-          baths: s.baths,
-          cars: s.cars,
-          land_area: s.land_area,
-          property_type: s.property_type,
-          sold_date: s.sold_date,
-          sold_date_raw: s.sold_date_raw,
-          similarity: s.similarity,
-          distance: s.distance,
-          latitude: s.latitude,
-          longitude: s.longitude,
-        }));
-      onSalesProcessed(sortedForCallback);
+  // Copy sales data to clipboard as HTML for email
+  const copyToClipboard = async () => {
+    if (sortedSales.length === 0) {
+      toast.error('No sales data to copy');
+      return;
     }
-  }, [processedSales, onSalesProcessed]);
+
+    // Generate HTML table for email
+    const htmlContent = `
+<h3 style="font-family: Arial, sans-serif; color: #1f2937; margin-bottom: 16px;">
+  Historic Property Sales - ${info?.suburb || 'Area'}, ${info?.state || ''} ${info?.postcode || ''}
+</h3>
+<p style="font-family: Arial, sans-serif; font-size: 14px; color: #6b7280; margin-bottom: 16px;">
+  ${sortedSales.length} comparable properties found. Data sourced from Homely.com.au on ${new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}.
+</p>
+<table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 14px;">
+  <thead>
+    <tr style="background-color: #f3f4f6;">
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">Address</th>
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: right;">Price</th>
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">Beds</th>
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">Baths</th>
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">Cars</th>
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: left;">Sold Date</th>
+      <th style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">Match</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${sortedSales.map((sale, index) => `
+    <tr style="background-color: ${index % 2 === 0 ? '#ffffff' : '#f9fafb'};">
+      <td style="border: 1px solid #d1d5db; padding: 10px;">${sale.address}</td>
+      <td style="border: 1px solid #d1d5db; padding: 10px; text-align: right; font-weight: bold; color: #059669;">$${sale.price?.toLocaleString() || 'N/A'}</td>
+      <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">${sale.beds || '-'}</td>
+      <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">${sale.baths || '-'}</td>
+      <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">${sale.cars || '-'}</td>
+      <td style="border: 1px solid #d1d5db; padding: 10px;">${sale.sold_date}</td>
+      <td style="border: 1px solid #d1d5db; padding: 10px; text-align: center;">
+        <span style="background-color: ${sale.similarity >= 80 ? '#dcfce7' : '#fee2e2'}; color: ${sale.similarity >= 80 ? '#166534' : '#991b1b'}; padding: 2px 8px; border-radius: 4px; font-weight: 600;">
+          ${sale.similarity}%
+        </span>
+      </td>
+    </tr>
+    `).join('')}
+  </tbody>
+</table>
+<p style="font-family: Arial, sans-serif; font-size: 12px; color: #9ca3af; margin-top: 16px;">
+  Source: Homely.com.au | Generated by PropertyVal
+</p>
+`;
+
+    // Also generate plain text version
+    const plainText = `Historic Property Sales - ${info?.suburb || 'Area'}, ${info?.state || ''} ${info?.postcode || ''}
+
+${sortedSales.map((sale, index) =>
+  `${index + 1}. ${sale.address}
+   Price: $${sale.price?.toLocaleString() || 'N/A'}
+   Specs: ${sale.beds || '-'} bed, ${sale.baths || '-'} bath, ${sale.cars || '-'} car
+   Sold: ${sale.sold_date}
+   Match: ${sale.similarity}%
+`).join('\n')}
+
+Source: Homely.com.au | Generated by PropertyVal
+`;
+
+    try {
+      // Try to copy as HTML (for rich email clients)
+      if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const textBlob = new Blob([plainText], { type: 'text/plain' });
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': blob,
+            'text/plain': textBlob,
+          }),
+        ]);
+      } else {
+        // Fallback to plain text
+        await navigator.clipboard.writeText(plainText);
+      }
+
+      setCopied(true);
+      toast.success('Copied to clipboard! Paste into email.');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
+  // Call onSalesProcessed callback when sales data changes
+  // Use a ref to track if we've already processed this set of sales
+  const lastSalesIdRef = useRef<string>('');
+  useEffect(() => {
+    if (!onSalesProcessed || sales.length === 0) return;
+
+    // Create a stable ID from the sales data
+    const salesId = sales.map(s => s.id).join(',');
+    if (salesId === lastSalesIdRef.current) return;
+    lastSalesIdRef.current = salesId;
+
+    // Sort by similarity (best match first) for the callback
+    const sortedForCallback = [...processedSales]
+      .sort((a, b) => b.similarity - a.similarity)
+      .map(s => ({
+        id: s.id,
+        address: s.address,
+        price: s.price,
+        beds: s.beds,
+        baths: s.baths,
+        cars: s.cars,
+        land_area: s.land_area,
+        property_type: s.property_type,
+        sold_date: s.sold_date,
+        sold_date_raw: s.sold_date_raw,
+        similarity: s.similarity,
+        distance: s.distance,
+        latitude: s.latitude,
+        longitude: s.longitude,
+      }));
+    onSalesProcessed(sortedForCallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sales]);
 
   // Initialize Google Map when viewMode changes to 'map'
   useEffect(() => {
@@ -655,41 +799,60 @@ export default function HistoricSalesCard({
   return (
     <div className={`rounded-2xl shadow-sm border ${colors.border} p-6`}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <h2 className={`text-lg font-bold ${colors.title} flex items-center gap-2`}>
-          <span className="text-xl">🏠</span>
-          Historic Property Sales
-          {info && (
-            <span className="text-sm font-normal text-gray-500">
-              ({info.suburb}, {info.state} {info.postcode})
-            </span>
-          )}
-        </h2>
-        <div className="flex items-center gap-2">
-          {/* Sort dropdown */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          >
-            {sortOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                Sort: {opt.label}
-              </option>
-            ))}
-          </select>
-          {/* Map/Table toggle */}
-          <button
-            onClick={() => setViewMode(viewMode === 'table' ? 'map' : 'table')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg font-semibold transition-colors text-sm ${
-              viewMode === 'map'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <MapPin size={16} />
-            {viewMode === 'map' ? 'Table' : 'Map'}
-          </button>
+      <div className="flex flex-col gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h2 className={`text-lg font-bold ${colors.title} flex items-center gap-2`}>
+            <span className="text-xl">🏠</span>
+            Historic Property Sales
+            {info && (
+              <span className="text-sm font-normal text-gray-500">
+                ({info.suburb}, {info.state} {info.postcode})
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center gap-2">
+            {/* Sort dropdown */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              {sortOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  Sort: {opt.label}
+                </option>
+              ))}
+            </select>
+            {/* Map/Table toggle */}
+            <button
+              onClick={() => setViewMode(viewMode === 'table' ? 'map' : 'table')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg font-semibold transition-colors text-sm ${
+                viewMode === 'map'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <MapPin size={16} />
+              {viewMode === 'map' ? 'Table' : 'Map'}
+            </button>
+            {/* Copy button */}
+            <button
+              onClick={copyToClipboard}
+              disabled={sortedSales.length === 0}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg font-semibold transition-colors text-sm ${
+                copied
+                  ? 'bg-green-500 text-white'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+              } disabled:opacity-50`}
+              title="Copy all sales data for email"
+            >
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+        </div>
+        {/* Refresh button on separate line */}
+        <div className="flex justify-end">
           <button
             onClick={() => fetchHistoricSales(true)}
             disabled={loading}
@@ -842,18 +1005,6 @@ export default function HistoricSalesCard({
                         </span>
                       )}
                       <span className="text-xs text-gray-500">{sale.similarity}% match</span>
-                      {sale.distance != null && (
-                        <a
-                          href={`https://www.google.com/search?q=${encodeURIComponent(sale.address)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 font-medium hover:underline inline-flex items-center gap-1"
-                          title="Search on Google"
-                        >
-                          {formatDistance(sale.distance)} away
-                          <MapPin size={10} />
-                        </a>
-                      )}
                     </div>
 
                     {/* Address link - links to Homely if available, otherwise Google Maps */}

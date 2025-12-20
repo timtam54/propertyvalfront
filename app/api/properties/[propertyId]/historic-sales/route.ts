@@ -71,6 +71,135 @@ function getHomelyPropertyType(propertyType: string): string {
 }
 
 /**
+ * Scrape land area from individual Homely property detail page
+ * This is slower but provides accurate land area data
+ */
+async function scrapeLandAreaFromDetailPage(homelyUrl: string): Promise<number | null> {
+  if (!homelyUrl) return null;
+
+  const scraperApiKey = process.env.SCRAPER_API_KEY;
+  let fetchUrl: string;
+  let fetchOptions: RequestInit;
+
+  if (scraperApiKey) {
+    fetchUrl = `https://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(homelyUrl)}&render=false&country_code=au`;
+    fetchOptions = {};
+  } else {
+    fetchUrl = homelyUrl;
+    fetchOptions = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-AU,en;q=0.9',
+      }
+    };
+  }
+
+  try {
+    const response = await fetch(fetchUrl, fetchOptions);
+    if (!response.ok) {
+      console.log(`[LandArea] HTTP ${response.status} for ${homelyUrl}`);
+      return null;
+    }
+
+    const html = await response.text();
+
+    // Try to find __NEXT_DATA__ JSON first
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (nextDataMatch) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        const property = nextData?.props?.pageProps?.ssrData?.property ||
+                        nextData?.props?.pageProps?.property ||
+                        nextData?.props?.pageProps?.listing;
+
+        if (property) {
+          // Try various field paths for land area
+          // Primary: landFeatures.areaSqm (confirmed in Homely data structure)
+          const landArea = property.landFeatures?.areaSqm ||
+                          property.features?.landArea ||
+                          property.features?.landSize ||
+                          property.propertyDetails?.landArea ||
+                          property.propertyDetails?.landSize ||
+                          property.landArea ||
+                          property.landSize ||
+                          null;
+
+          if (landArea && typeof landArea === 'number' && landArea > 0) {
+            console.log(`[LandArea] Found ${landArea}sqm from JSON for ${homelyUrl}`);
+            return landArea;
+          }
+        }
+      } catch (e) {
+        // JSON parse failed, continue to regex fallback
+      }
+    }
+
+    // Fallback: Try regex patterns to find land size in HTML
+    // Pattern examples: "Land size: 607 m²", "Land: 607m²", "607 sqm land", "areaSqm":506
+    const patterns = [
+      /"areaSqm"\s*:\s*(\d+)/i,                          // Homely's landFeatures.areaSqm
+      /land\s*(?:size|area)?[:\s]*(\d+(?:,\d+)?)\s*(?:m²|m2|sqm)/i,
+      /(\d+(?:,\d+)?)\s*(?:m²|m2|sqm)\s*(?:land|block|allotment)/i,
+      /"landArea"\s*:\s*(\d+)/i,
+      /"landSize"\s*:\s*(\d+)/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        const landArea = parseInt(match[1].replace(/,/g, ''));
+        if (landArea > 50 && landArea < 100000) { // Reasonable range for land area in sqm
+          console.log(`[LandArea] Found ${landArea}sqm via regex for ${homelyUrl}`);
+          return landArea;
+        }
+      }
+    }
+
+    console.log(`[LandArea] No land area found for ${homelyUrl}`);
+    return null;
+  } catch (error: any) {
+    console.log(`[LandArea] Error: ${error.message} for ${homelyUrl}`);
+    return null;
+  }
+}
+
+/**
+ * Fetch land area for multiple properties in parallel (with concurrency limit)
+ */
+async function fetchLandAreasForProperties(properties: SoldProperty[], concurrencyLimit: number = 5): Promise<void> {
+  const propertiesNeedingLandArea = properties.filter(p => !p.land_area && p.homely_url);
+
+  if (propertiesNeedingLandArea.length === 0) {
+    console.log(`[LandArea] All properties already have land area or no URLs`);
+    return;
+  }
+
+  console.log(`[LandArea] Fetching land area for ${propertiesNeedingLandArea.length} properties...`);
+
+  // Process in batches to limit concurrent requests
+  for (let i = 0; i < propertiesNeedingLandArea.length; i += concurrencyLimit) {
+    const batch = propertiesNeedingLandArea.slice(i, i + concurrencyLimit);
+    const results = await Promise.all(
+      batch.map(async (prop) => {
+        const landArea = await scrapeLandAreaFromDetailPage(prop.homely_url!);
+        return { prop, landArea };
+      })
+    );
+
+    // Update properties with land area
+    for (const { prop, landArea } of results) {
+      if (landArea) {
+        prop.land_area = landArea;
+      }
+    }
+  }
+
+  const foundCount = propertiesNeedingLandArea.filter(p => p.land_area).length;
+  console.log(`[LandArea] Found land area for ${foundCount}/${propertiesNeedingLandArea.length} properties`);
+}
+
+/**
  * Parse location to extract suburb, state, postcode
  */
 function parseLocation(location: string): { suburb: string; state: string; postcode: string | null } {
@@ -195,13 +324,10 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
           : 'Recently';
 
         const propType = listing.statusLabels?.propertyTypeDescription || 'House';
-        // Try multiple possible field names for land area
-        const landArea = listing.features?.landArea ||
+        // Land area is in landFeatures.areaSqm on the listing page
+        const landArea = listing.landFeatures?.areaSqm ||
+                         listing.features?.landArea ||
                          listing.features?.landSize ||
-                         listing.features?.land ||
-                         listing.landSize ||
-                         listing.propertyDetails?.landArea ||
-                         listing.propertyDetails?.landSize ||
                          null;
 
         // Try to get coordinates from Homely data
@@ -233,10 +359,13 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
           homelyUrl = `https://www.homely.com.au/homes/${listing.uri}/${listing.id}`;
         }
 
-        // Log first listing for debugging
+        // Log first listing for debugging - show all available fields
         if (properties.length === 0) {
           console.log(`[Historic Sales] First listing - id: ${listing.id}, uri: ${listing.uri}, canonicalUri: ${listing.canonicalUri}`);
           console.log(`[Historic Sales] Generated homelyUrl: ${homelyUrl}`);
+          console.log(`[Historic Sales] Features:`, JSON.stringify(listing.features, null, 2));
+          console.log(`[Historic Sales] PropertyDetails:`, JSON.stringify(listing.propertyDetails, null, 2));
+          console.log(`[Historic Sales] All listing keys:`, Object.keys(listing));
         }
 
         properties.push({
@@ -391,6 +520,9 @@ async function fetchSuburbSales(
       })
     );
   }
+
+  // Land area is now extracted from the listing page (landFeatures.areaSqm)
+  // No need to fetch individual property detail pages
 
   // Cache
   if (markedProperties.length > 0) {

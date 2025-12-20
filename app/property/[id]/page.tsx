@@ -609,6 +609,7 @@ export default function PropertyDetailPage() {
             propertyType={property.property_type}
             propertyBeds={property.beds}
             propertyBaths={property.baths}
+            propertyLandArea={property.size}
             propertyLatitude={property.latitude}
             propertyLongitude={property.longitude}
             variant="purple"

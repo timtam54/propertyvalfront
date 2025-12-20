@@ -759,33 +759,78 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
 
     // Build messages array - include images if available for visual analysis
     // Build valuation anchor text - this is CRITICAL for accurate valuations
+    // Calculate time adjustments for each comparable
+    const today = new Date();
+    const subjectLandArea = property.size || 0;
+
     let valuationAnchor = '';
-    if (exactMatches.length > 0) {
-      const exactPrices = exactMatches.map(e => e.price);
-      const exactAvg = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
-      const exactMin = Math.min(...exactPrices);
-      const exactMax = Math.max(...exactPrices);
-      valuationAnchor = `
-⚠️ CRITICAL VALUATION ANCHOR - YOU MUST USE THIS:
-We have ${exactMatches.length} EXACT MATCH comparable sale(s) with the same bed/bath configuration (${property.beds} bed, ${property.baths} bath):
-- Exact Match Price Range: ${formatPrice(exactMin)} to ${formatPrice(exactMax)}
-- Exact Match Average: ${formatPrice(exactAvg)}
+    if (exactMatches.length > 0 || bestMatch) {
+      const refProperty = exactMatches.length > 0 ? exactMatches[0] : bestMatch!;
+      const refPrice = refProperty.price;
+      const refLandArea = refProperty.land_area || 0;
 
-YOUR ESTIMATED VALUE RANGE MUST BE BASED ON THESE EXACT MATCH PRICES.
-- If property condition is average: use ${formatPrice(Math.round(exactAvg * 0.95))} to ${formatPrice(Math.round(exactAvg * 1.05))}
-- If property is in excellent/renovated condition: use ${formatPrice(Math.round(exactAvg * 1.0))} to ${formatPrice(Math.round(exactAvg * 1.10))}
-- If property needs work/dated: use ${formatPrice(Math.round(exactAvg * 0.85))} to ${formatPrice(Math.round(exactAvg * 0.95))}
+      // Calculate months since sale
+      let monthsSinceSale = 0;
+      if (refProperty.sold_date_raw) {
+        const soldDate = new Date(refProperty.sold_date_raw);
+        monthsSinceSale = Math.round((today.getTime() - soldDate.getTime()) / (1000 * 60 * 60 * 24 * 30));
+      }
 
-DO NOT estimate values significantly different from the comparable sales data. The comparable sales are REAL RECENT SALES in the same area.`;
-    } else if (bestMatch) {
-      valuationAnchor = `
-⚠️ CRITICAL VALUATION ANCHOR - YOU MUST USE THIS:
-The PRIMARY COMPARABLE sold for ${formatPrice(bestMatch.price)}.
-Your estimated value range MUST be anchored to this price:
-- Base your valuation on ${formatPrice(Math.round(bestMatch.price * 0.90))} to ${formatPrice(Math.round(bestMatch.price * 1.10))}
-- Adjust within this range based on property condition and spec differences.
+      // Calculate time adjustment (assume 5% annual growth = ~0.4% per month)
+      const timeAdjustmentPercent = Math.min(monthsSinceSale * 0.4, 15); // Cap at 15%
+      const timeAdjustment = Math.round(refPrice * (timeAdjustmentPercent / 100));
 
-DO NOT estimate values significantly different from the comparable sales data.`;
+      // Calculate land area adjustment ($1000/sqm is typical for QLD)
+      const landDifference = subjectLandArea - refLandArea;
+      const landAdjustment = landDifference > 0 ? landDifference * 1000 : landDifference * 800; // Less penalty for smaller
+
+      // Build adjustment breakdown
+      let adjustmentText = '';
+      if (monthsSinceSale > 0 || landDifference !== 0) {
+        adjustmentText = `
+MANDATORY ADJUSTMENTS TO APPLY:
+1. TIME ADJUSTMENT: The comparable sold ${monthsSinceSale} months ago.
+   - Market growth since then: +${timeAdjustmentPercent.toFixed(1)}% = +${formatPrice(timeAdjustment)}
+
+2. LAND SIZE ADJUSTMENT: Subject has ${subjectLandArea}m², comparable has ${refLandArea}m² (difference: ${landDifference > 0 ? '+' : ''}${landDifference}m²)
+   - At $1,000/sqm: ${landDifference > 0 ? '+' : ''}${formatPrice(Math.abs(landAdjustment))}
+
+3. QUALITY/CONDITION: Assess from photos and description
+   - Superior build/views/condition: +5-10%
+   - Average condition: no adjustment
+   - Inferior condition: -5-10%
+
+STARTING PRICE: ${formatPrice(refPrice)}
++ Time adjustment: ${formatPrice(timeAdjustment)}
++ Land adjustment: ${formatPrice(landAdjustment)}
+= ADJUSTED BASE: ${formatPrice(refPrice + timeAdjustment + landAdjustment)}
+
+YOUR VALUATION MUST BE AT OR ABOVE ${formatPrice(refPrice + timeAdjustment + landAdjustment)} for a property that is EQUAL OR BETTER than the comparable.
+`;
+      }
+
+      if (exactMatches.length > 0) {
+        const exactPrices = exactMatches.map(e => e.price);
+        const exactAvg = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+        valuationAnchor = `
+⚠️ CRITICAL VALUATION ANCHOR:
+We have ${exactMatches.length} EXACT MATCH comparable sale(s) (${property.beds} bed, ${property.baths} bath):
+- Primary Comparable: ${refProperty.address}
+- Sale Price: ${formatPrice(refPrice)}
+- Sold: ${refProperty.sold_date} (${monthsSinceSale} months ago)
+- Land Size: ${refLandArea}m²
+${adjustmentText}
+⚠️ NEVER value a SUPERIOR property LOWER than an INFERIOR comparable. If the subject property has MORE land, is NEWER, has BETTER views, or is in BETTER condition - the value MUST be HIGHER than the comparable.`;
+      } else {
+        valuationAnchor = `
+⚠️ CRITICAL VALUATION ANCHOR:
+PRIMARY COMPARABLE: ${bestMatch!.address}
+- Sale Price: ${formatPrice(bestMatch!.price)}
+- Sold: ${bestMatch!.sold_date} (${monthsSinceSale} months ago)
+- Land Size: ${refLandArea}m²
+${adjustmentText}
+⚠️ NEVER value a SUPERIOR property LOWER than an INFERIOR comparable.`;
+      }
     }
 
     // Get top 5 comparables for the Market Analysis section (increased from 3)

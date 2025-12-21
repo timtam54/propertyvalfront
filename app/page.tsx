@@ -115,10 +115,10 @@ export default function HomePage() {
   // Don't render page content until authenticated
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Checking authentication...</p>
+          <p className="text-gray-600 dark:text-gray-400">Checking authentication...</p>
         </div>
       </div>
     );
@@ -575,7 +575,7 @@ export default function HomePage() {
                       {userInitials}
                     </div>
                   )}
-                  <span className="hidden lg:block text-sm font-medium text-gray-700 max-w-[120px] truncate">
+                  <span className="hidden lg:block text-sm font-medium text-gray-700 dark:text-gray-200 max-w-[120px] truncate">
                     {userName}
                   </span>
                 </button>

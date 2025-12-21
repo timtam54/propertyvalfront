@@ -252,10 +252,10 @@ export default function HistoricSalesCard({
     // A property 0m away (same building) is far more comparable than one 400m away, regardless of sale date
     // Recency has lower weight - a sale from 3 weeks ago vs 6 weeks ago has minimal price impact
     const w = weights || {
-      bedroom_exact_match_bonus: 0,
-      bedroom_diff_penalty_per_bed: 25,
-      bathroom_exact_match_bonus: 0,
-      bathroom_diff_penalty_per_bath: 20,
+      bedroom_exact_match_bonus: 10,  // Bonus for matching bedrooms
+      bedroom_diff_penalty_per_bed: 15,
+      bathroom_exact_match_bonus: 5,  // Bonus for matching bathrooms
+      bathroom_diff_penalty_per_bath: 10,
       density_house_to_unit_penalty: 40,
       density_house_to_subdivision_penalty: 20,
       // Distance weights - HEAVILY weighted because location is critical
@@ -273,16 +273,16 @@ export default function HistoricSalesCard({
       distance_far_threshold_km: 1,        // 1km
       distance_very_far_penalty: 40,       // Very far - major penalty
       distance_very_far_threshold_km: 2,   // 2km
-      // Recency weights - lower weight because short-term date differences have minimal price impact
-      recency_very_recent_bonus: 3,        // Reduced from 10
+      // Recency weights - recent sales are more relevant
+      recency_very_recent_bonus: 10,       // Sold in last 2 months
       recency_very_recent_threshold_months: 2,
-      recency_recent_bonus: 1,             // Reduced from 5
+      recency_recent_bonus: 5,             // Sold in last 4 months
       recency_recent_threshold_months: 4,
-      recency_getting_old_penalty: 3,      // Reduced from 5
+      recency_getting_old_penalty: 5,      // 9+ months old
       recency_getting_old_threshold_months: 9,
-      recency_old_penalty: 8,              // Reduced from 10
+      recency_old_penalty: 10,             // 15+ months old
       recency_old_threshold_months: 15,
-      recency_very_old_penalty: 15,        // Reduced from 20
+      recency_very_old_penalty: 20,        // 24+ months old
       recency_very_old_threshold_months: 24,
       // Land area matching - high weight because land size is critical for accurate comparisons
       land_area_weight: 30, // Max penalty/bonus for land area difference
@@ -293,8 +293,9 @@ export default function HistoricSalesCard({
     const bedDiff = Math.abs(propertyBeds - (sale.beds || propertyBeds));
     const bathDiff = Math.abs(propertyBaths - (sale.baths || propertyBaths));
 
-    // Start with 100 and apply penalties/bonuses
-    let similarity = 100;
+    // Start with base score of 50 - only truly matching properties should reach 100
+    // Distance and other factors add or subtract from this base
+    let similarity = 50;
 
     // Apply bedroom scoring
     if (bedDiff === 0) {

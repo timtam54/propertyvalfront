@@ -145,19 +145,25 @@ export default function HomePage() {
   // Fetch user admin status
   useEffect(() => {
     const fetchUserAdmin = async () => {
-      if (!userEmail) return;
+      if (!isAuthenticated || !userEmail) {
+        setIsAdmin(false);
+        return;
+      }
       try {
         const response = await fetch(`${API}/auth/users/${encodeURIComponent(userEmail)}`);
         if (response.ok) {
           const userData = await response.json();
           setIsAdmin(userData.admin === true);
+        } else {
+          setIsAdmin(false);
         }
       } catch (err) {
         console.error('Failed to fetch user admin status:', err);
+        setIsAdmin(false);
       }
     };
     fetchUserAdmin();
-  }, [userEmail]);
+  }, [isAuthenticated, userEmail]);
   // View and filter states
   const [activeView, setActiveView] = useState<"list" | "map">("list");
   const [showFilters, setShowFilters] = useState(false);

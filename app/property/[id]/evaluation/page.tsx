@@ -194,6 +194,17 @@ export default function PropertyEvaluationPage() {
     setError(null);
     setWarning(null);
 
+    // Log the historic sales data being sent
+    console.log(`[EvaluatePage] Sending ${historicSalesData.length} historic sales to API`);
+    if (historicSalesData.length > 0) {
+      console.log(`[EvaluatePage] Top 3 sales being sent:`);
+      historicSalesData.slice(0, 3).forEach((s, i) => {
+        console.log(`  ${i + 1}. ${s.address} - $${s.price} - ${s.similarity}% match - ${s.distance}km`);
+      });
+    } else {
+      console.warn(`[EvaluatePage] WARNING: historicSalesData is EMPTY! The HistoricSalesCard callback may not have fired yet.`);
+    }
+
     try {
       // Use local API route for web scraping evaluation
       // PASS THE HISTORIC SALES DATA from HistoricSalesCard to ensure consistency

@@ -863,6 +863,24 @@ export default function PropertyEvaluationPage() {
           </div>
         </div>
 
+        {/* Historic Sales Card - ALWAYS render to populate data before evaluation */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <HistoricSalesCard
+            propertyId={propertyId}
+            propertyLocation={property.location}
+            propertyType={property.property_type}
+            propertyBeds={property.beds}
+            propertyBaths={property.baths}
+            propertyLandArea={property.size}
+            propertyLatitude={property.latitude}
+            propertyLongitude={property.longitude}
+            variant="purple"
+            maxItems={15}
+            showSourceLink={true}
+            onSalesProcessed={setHistoricSalesData}
+          />
+        </div>
+
         {/* Evaluation Section */}
         {!property.evaluation_report ? (
           <div style={{ textAlign: 'center', padding: '1.5rem 1rem', background: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -896,14 +914,14 @@ export default function PropertyEvaluationPage() {
 
             <button
               onClick={evaluateProperty}
-              disabled={evaluating}
+              disabled={evaluating || historicSalesData.length === 0}
               style={{
-                background: evaluating ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: (evaluating || historicSalesData.length === 0) ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 color: 'white',
                 padding: '1.25rem 2.5rem',
                 borderRadius: '12px',
                 border: 'none',
-                cursor: evaluating ? 'not-allowed' : 'pointer',
+                cursor: (evaluating || historicSalesData.length === 0) ? 'not-allowed' : 'pointer',
                 fontSize: '1.1rem',
                 fontWeight: '600',
                 display: 'inline-flex',
@@ -911,7 +929,7 @@ export default function PropertyEvaluationPage() {
                 gap: '0.75rem',
               }}
             >
-              ✨ {evaluating ? 'Evaluating... Please wait up to 2 minutes' : 'Start Property Evaluation'}
+              ✨ {evaluating ? 'Evaluating... Please wait up to 2 minutes' : historicSalesData.length === 0 ? 'Loading comparable sales...' : 'Start Property Evaluation'}
             </button>
 
             {(!property.images || property.images.length === 0) && (
@@ -999,24 +1017,6 @@ export default function PropertyEvaluationPage() {
                 </div>
               </div>
             )}
-
-            {/* Historic Sales in Area - SHOWN FIRST as primary data source */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <HistoricSalesCard
-                propertyId={propertyId}
-                propertyLocation={property.location}
-                propertyType={property.property_type}
-                propertyBeds={property.beds}
-                propertyBaths={property.baths}
-                propertyLandArea={property.size}
-                propertyLatitude={property.latitude}
-                propertyLongitude={property.longitude}
-                variant="purple"
-                maxItems={15}
-                showSourceLink={true}
-                onSalesProcessed={setHistoricSalesData}
-              />
-            </div>
 
             {/* Evaluation Report */}
             <div

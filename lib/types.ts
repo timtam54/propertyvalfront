@@ -265,16 +265,26 @@ export interface HistoricSalesWeights {
   density_house_to_subdivision_penalty: number;
 
   // Distance-based adjustments (in km)
+  // Same building - highest priority for units/apartments
+  distance_same_building_bonus?: number;
+  distance_same_building_threshold_km?: number;
+  // Ultra close - same street/complex
   distance_ultra_close_bonus: number;
   distance_ultra_close_threshold_km: number;
+  // Very close
   distance_very_close_bonus: number;
   distance_very_close_threshold_km: number;
+  // Close
   distance_close_bonus: number;
   distance_close_threshold_km: number;
-  distance_moderate_penalty: number;
+  // Moderate distance - small bonus
+  distance_moderate_bonus?: number;
+  distance_moderate_penalty?: number; // Legacy - kept for backwards compatibility
   distance_moderate_threshold_km: number;
+  // Far - penalty starts
   distance_far_penalty: number;
   distance_far_threshold_km: number;
+  // Very far - major penalty
   distance_very_far_penalty: number;
   distance_very_far_threshold_km: number;
 

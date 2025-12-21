@@ -245,6 +245,9 @@ export default function HistoricSalesCard({
   // Process sales with similarity score and distance using configurable weights
   const processedSales = sales.map((sale) => {
     // Use weights from API or fall back to defaults
+    // Distance is heavily weighted - location is the most important factor for comparable properties
+    // A property 0m away (same building) is far more comparable than one 400m away, regardless of sale date
+    // Recency has lower weight - a sale from 3 weeks ago vs 6 weeks ago has minimal price impact
     const w = weights || {
       bedroom_exact_match_bonus: 0,
       bedroom_diff_penalty_per_bed: 25,
@@ -252,27 +255,31 @@ export default function HistoricSalesCard({
       bathroom_diff_penalty_per_bath: 20,
       density_house_to_unit_penalty: 40,
       density_house_to_subdivision_penalty: 20,
-      distance_ultra_close_bonus: 40,
-      distance_ultra_close_threshold_km: 0.2,
-      distance_very_close_bonus: 30,
-      distance_very_close_threshold_km: 0.35,
-      distance_close_bonus: 15,
-      distance_close_threshold_km: 0.5,
-      distance_moderate_penalty: 8,
-      distance_moderate_threshold_km: 1,
-      distance_far_penalty: 15,
-      distance_far_threshold_km: 2,
-      distance_very_far_penalty: 25,
-      distance_very_far_threshold_km: 5,
-      recency_very_recent_bonus: 10,
-      recency_very_recent_threshold_months: 3,
-      recency_recent_bonus: 5,
-      recency_recent_threshold_months: 6,
-      recency_getting_old_penalty: 5,
-      recency_getting_old_threshold_months: 12,
-      recency_old_penalty: 10,
-      recency_old_threshold_months: 18,
-      recency_very_old_penalty: 20,
+      // Distance weights - HEAVILY weighted because location is critical
+      distance_same_building_bonus: 70,    // Same building (0m) - massive bonus
+      distance_same_building_threshold_km: 0.02, // 20m - truly same building
+      distance_ultra_close_bonus: 55,      // Same street/complex - huge bonus
+      distance_ultra_close_threshold_km: 0.1, // 100m
+      distance_very_close_bonus: 40,       // Very close properties
+      distance_very_close_threshold_km: 0.2,  // 200m
+      distance_close_bonus: 25,            // Close properties
+      distance_close_threshold_km: 0.35,   // 350m
+      distance_moderate_bonus: 10,         // Moderate distance - small bonus
+      distance_moderate_threshold_km: 0.5, // 500m
+      distance_far_penalty: 20,            // Getting far - penalty starts
+      distance_far_threshold_km: 1,        // 1km
+      distance_very_far_penalty: 40,       // Very far - major penalty
+      distance_very_far_threshold_km: 2,   // 2km
+      // Recency weights - lower weight because short-term date differences have minimal price impact
+      recency_very_recent_bonus: 3,        // Reduced from 10
+      recency_very_recent_threshold_months: 2,
+      recency_recent_bonus: 1,             // Reduced from 5
+      recency_recent_threshold_months: 4,
+      recency_getting_old_penalty: 3,      // Reduced from 5
+      recency_getting_old_threshold_months: 9,
+      recency_old_penalty: 8,              // Reduced from 10
+      recency_old_threshold_months: 15,
+      recency_very_old_penalty: 15,        // Reduced from 20
       recency_very_old_threshold_months: 24,
       // Land area matching - high weight because land size is critical for accurate comparisons
       land_area_weight: 30, // Max penalty/bonus for land area difference
@@ -331,26 +338,37 @@ export default function HistoricSalesCard({
       );
 
       // Apply distance-based score adjustment using configurable thresholds
-      if (distance < w.distance_ultra_close_threshold_km) {
-        // Ultra close (<200m) - big bonus
+      // Distance is the most important factor - closer properties are always better comparables
+      // Use defaults if new fields not present in API response
+      const sameBuildingThreshold = w.distance_same_building_threshold_km ?? 0.02;
+      const sameBuildingBonus = w.distance_same_building_bonus ?? 70;
+      const moderateBonus = w.distance_moderate_bonus ?? 10;
+
+      if (distance < sameBuildingThreshold) {
+        // Same building (0-20m) - massive bonus
+        similarity += sameBuildingBonus;
+      } else if (distance < w.distance_ultra_close_threshold_km) {
+        // Ultra close (20-100m) - huge bonus
         similarity += w.distance_ultra_close_bonus;
       } else if (distance < w.distance_very_close_threshold_km) {
-        // Very close (200-350m) - good bonus
+        // Very close (100-200m) - large bonus
         similarity += w.distance_very_close_bonus;
       } else if (distance < w.distance_close_threshold_km) {
-        // Close (350-500m) - small bonus
+        // Close (200-350m) - good bonus
         similarity += w.distance_close_bonus;
-      } else if (distance > w.distance_very_far_threshold_km) {
-        // Very far - big penalty
-        similarity -= w.distance_very_far_penalty;
-      } else if (distance > w.distance_far_threshold_km) {
-        // Far - medium penalty
+      } else if (distance < w.distance_moderate_threshold_km) {
+        // Moderate (350-500m) - small bonus
+        similarity += moderateBonus;
+      } else if (distance < w.distance_far_threshold_km) {
+        // Getting far (500m-1km) - no bonus or penalty
+        // No adjustment
+      } else if (distance < w.distance_very_far_threshold_km) {
+        // Far (1-2km) - penalty starts
         similarity -= w.distance_far_penalty;
-      } else if (distance > w.distance_moderate_threshold_km) {
-        // Moderate distance - small penalty
-        similarity -= w.distance_moderate_penalty;
+      } else {
+        // Very far (>2km) - major penalty
+        similarity -= w.distance_very_far_penalty;
       }
-      // Between close and moderate thresholds: no adjustment
     }
 
     // Calculate months since sale for recency scoring
@@ -477,8 +495,14 @@ export default function HistoricSalesCard({
           return a.monthsAgo - b.monthsAgo;
         case 'match':
         default:
-          // Best overall match first
-          return b.similarity - a.similarity;
+          // Best overall match first, with distance as tiebreaker
+          const simDiff = b.similarity - a.similarity;
+          if (simDiff !== 0) return simDiff;
+          // When similarity is equal, prefer closer properties
+          if (a.distance == null && b.distance == null) return 0;
+          if (a.distance == null) return 1;
+          if (b.distance == null) return -1;
+          return a.distance - b.distance;
       }
     })
     .slice(0, maxItems);

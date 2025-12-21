@@ -154,7 +154,8 @@ export default function HomePage() {
         if (response.ok) {
           const data = await response.json();
           const currentUser = data.users?.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
-          setIsAdmin(currentUser?.admin === true);
+          // Handle both boolean true and bit field value 1
+          setIsAdmin(currentUser?.admin === true || currentUser?.admin === 1);
         } else {
           setIsAdmin(false);
         }

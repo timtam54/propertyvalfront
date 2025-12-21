@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, Home, Loader2, Bed, Bath, Car, MapPin, DollarSign, Ruler,
   Edit, Trash2, ChevronLeft, ChevronRight, Sparkles, Share2,
-  X, Save, Upload, Menu
+  X, Save, Upload, Menu, Copy, Check
 } from "lucide-react";
 import { API } from "@/lib/config";
 import ReportUploadModal from "@/components/ReportUploadModal";
@@ -64,6 +64,7 @@ export default function PropertyDetailPage() {
   const [isEditingPitch, setIsEditingPitch] = useState(false);
   const [editedPitch, setEditedPitch] = useState("");
   const [generatingPitch, setGeneratingPitch] = useState(false);
+  const [pitchCopied, setPitchCopied] = useState(false);
 
   // Facebook states
   const [generatingFbAd, setGeneratingFbAd] = useState(false);
@@ -218,6 +219,19 @@ export default function PropertyDetailPage() {
     } catch (error: any) {
       console.error("Error updating pitch:", error);
       toast.error("Failed to update pitch");
+    }
+  };
+
+  const copyPitchToClipboard = async () => {
+    if (!property?.pitch) return;
+    try {
+      await navigator.clipboard.writeText(property.pitch);
+      setPitchCopied(true);
+      toast.success("Pitch copied to clipboard!");
+      setTimeout(() => setPitchCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+      toast.error("Failed to copy to clipboard");
     }
   };
 
@@ -719,6 +733,13 @@ export default function PropertyDetailPage() {
             <h2 className="text-lg font-bold text-gray-900">AI-Generated Selling Pitch</h2>
             {property.pitch && !isEditingPitch && (
               <div className="flex gap-2">
+                <button
+                  onClick={copyPitchToClipboard}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors text-sm"
+                >
+                  {pitchCopied ? <Check size={14} /> : <Copy size={14} />}
+                  {pitchCopied ? "Copied!" : "Copy"}
+                </button>
                 <button
                   onClick={startEditingPitch}
                   className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg font-semibold hover:bg-cyan-600 transition-colors text-sm"

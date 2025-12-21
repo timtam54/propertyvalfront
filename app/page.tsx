@@ -3,14 +3,14 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import axios from "axios";
 import { toast } from "sonner";
-import { Home, Bed, Bath, Car, Building, Edit, Trash2, DollarSign, Search, Upload, CheckCircle, Settings, User, FileText, X, LogOut, Menu, MapPin, List, Filter, ChevronDown, Star, Copy, Download, LayoutTemplate, MessageSquare } from "lucide-react";
+import { Home, Bed, Bath, Car, Building, Edit, Trash2, Search, Upload, CheckCircle, Settings, User, X, LogOut, Menu, MapPin, List, Filter, Star, Download, Plus, TrendingUp, Clock, DollarSign } from "lucide-react";
 import { API } from "@/lib/config";
-import ReportUploadModal from "@/components/ReportUploadModal";
 import { PropertyQuickActions } from "@/components/PropertyActions";
-import PropertyTemplates from "@/components/PropertyTemplates";
 import BatchExport from "@/components/BatchExport";
+import PropertyEdit from "@/components/PropertyEdit";
+import PropertyImageCarousel from "@/components/PropertyImageCarousel";
+import DarkModeToggle from "@/components/DarkModeToggle";
 import { useMsalSafe, useIsAuthenticatedSafe, useGoogleAuth } from "@/components/AuthProvider";
 import { usePageView } from "@/hooks/useAudit";
 
@@ -54,21 +54,32 @@ interface Property {
   additional_report?: string;
   user_email?: string;
   evaluation_report?: string | null;
-  // New productivity fields
+  evaluation_date?: string;
   is_favourite?: boolean;
   notes?: PropertyNote[];
-  // Neighbouring suburb for additional comparables
   neighbouring_suburb?: string;
   neighbouring_postcode?: string;
   neighbouring_state?: string;
+  created_at?: string;
+  comparables_data?: {
+    statistics?: {
+      price_range?: {
+        min?: number;
+        max?: number;
+        avg?: number;
+      };
+    };
+  };
 }
 
-interface MarketingPackage {
-  id: string;
-  name: string;
-  price: number;
-  description?: string;
-  inclusions?: Array<{ text: string; price?: number } | string>;
+// Helper function to calculate days since a date
+function getDaysSince(dateString?: string): number | null {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffTime = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
 }
 
 export default function HomePage() {
@@ -101,8 +112,7 @@ export default function HomePage() {
     }
   }, [isAuthenticated, router]);
 
-  // Don't render page content until authenticated - prevents race condition
-  // where user can interact with form before redirect happens
+  // Don't render page content until authenticated
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -127,6 +137,7 @@ export default function HomePage() {
       router.push("/login");
     }
   };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   // View and filter states
@@ -143,41 +154,21 @@ export default function HomePage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    beds: "",
-    baths: "",
-    carpark: "",
-    location: "",
-    price: "",
-    size: "",
-    property_type: "",
-    features: "",
-    strata_body_corps: "",
-    council_rates: "",
-    images: [] as string[],
-    agent1_name: "",
-    agent1_phone: "",
-    agent2_name: "",
-    agent2_phone: "",
-    agent_email: "",
-    neighbouring_suburb: "",
-    neighbouring_postcode: "",
-    neighbouring_state: "",
-  });
   const [currentPage, setCurrentPage] = useState(1);
   const [googleLoaded, setGoogleLoaded] = useState(false);
 
-  // Poll for Google Maps to be loaded (since Script onLoad has closure issues)
+  // Property Edit Modal state
+  const [showPropertyEdit, setShowPropertyEdit] = useState(false);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+
+  // Poll for Google Maps to be loaded
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     let timeout: NodeJS.Timeout | null = null;
 
     const checkGoogleMaps = () => {
       if (typeof window !== 'undefined' && window.google?.maps?.places) {
-        console.log("Google Maps detected via polling");
         setGoogleLoaded(true);
-        // Clear both interval and timeout when detected
         if (interval) clearInterval(interval);
         if (timeout) clearTimeout(timeout);
         return true;
@@ -185,19 +176,14 @@ export default function HomePage() {
       return false;
     };
 
-    // Check immediately
     if (checkGoogleMaps()) return;
 
-    // Poll every 100ms for up to 10 seconds
     interval = setInterval(() => {
       checkGoogleMaps();
     }, 100);
 
     timeout = setTimeout(() => {
       if (interval) clearInterval(interval);
-      if (!window.google?.maps?.places) {
-        console.error("Google Maps failed to load after 10 seconds");
-      }
     }, 10000);
 
     return () => {
@@ -206,21 +192,10 @@ export default function HomePage() {
     };
   }, []);
 
-  const locationInputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const ITEMS_PER_PAGE = 12;
-  const [marketingPackages, setMarketingPackages] = useState<MarketingPackage[]>([]);
-  const [selectedPackage, setSelectedPackage] = useState("");
-  const [showRpDataModal, setShowRpDataModal] = useState(false);
-  const [showAdditionalReportModal, setShowAdditionalReportModal] = useState(false);
-  const [rpDataText, setRpDataText] = useState("");
-  const [additionalReportText, setAdditionalReportText] = useState("");
-  const [uploadingRpData, setUploadingRpData] = useState(false);
-  const [uploadingAdditionalReport, setUploadingAdditionalReport] = useState(false);
-  // New productivity feature states
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showBatchExport, setShowBatchExport] = useState(false);
   const [showFavouritesOnly, setShowFavouritesOnly] = useState(false);
+  const [showBatchExport, setShowBatchExport] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const paginatedProperties = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -228,119 +203,74 @@ export default function HomePage() {
     return properties.slice(startIndex, endIndex);
   }, [properties, currentPage]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        // Allow Escape to blur inputs
+        if (e.key === 'Escape') {
+          target.blur();
+        }
+        return;
+      }
+
+      // Don't trigger if modal is open
+      if (showPropertyEdit || showBatchExport) {
+        if (e.key === 'Escape') {
+          setShowPropertyEdit(false);
+          setShowBatchExport(false);
+        }
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case 'n':
+          // New property
+          e.preventDefault();
+          setEditingProperty(null);
+          setShowPropertyEdit(true);
+          break;
+        case '/':
+          // Focus search
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          break;
+        case 'escape':
+          // Clear search
+          if (searchQuery) {
+            setSearchQuery('');
+            applyFilters('', filters, showFavouritesOnly);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPropertyEdit, showBatchExport, searchQuery, filters, showFavouritesOnly]);
+
   useEffect(() => {
     if (userEmail) {
       fetchProperties();
     }
-    loadAgentSettings();
-    loadMarketingPackages();
   }, [userEmail]);
-
-  // Initialize Google Places Autocomplete
-  useEffect(() => {
-    if (googleLoaded && locationInputRef.current && !autocompleteRef.current) {
-      const autocomplete = new window.google.maps.places.Autocomplete(
-        locationInputRef.current,
-        {
-          types: ['address'],
-          componentRestrictions: { country: 'au' }, // Restrict to Australia
-        }
-      );
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace();
-        if (place.formatted_address) {
-          const address = place.formatted_address;
-          setFormData((prev) => ({
-            ...prev,
-            location: address,
-          }));
-        }
-      });
-
-      autocompleteRef.current = autocomplete;
-    }
-  }, [googleLoaded]);
-
-  const loadMarketingPackages = async () => {
-    try {
-      const response = await axios.get(`${API}/marketing-packages`);
-      if (response.data.success) {
-        setMarketingPackages(response.data.packages || []);
-      }
-    } catch (error) {
-      console.error("Error loading marketing packages:", error);
-    }
-  };
-
-  const loadAgentSettings = async () => {
-    try {
-      const response = await axios.get(`${API}/agent-settings`);
-      if (response.data && response.data.settings) {
-        const settings = response.data.settings;
-        setFormData((prev) => ({
-          ...prev,
-          agent1_name: settings.agent1_name || "",
-          agent1_phone: settings.agent1_phone || "",
-          agent2_name: settings.agent2_name || "",
-          agent2_phone: settings.agent2_phone || "",
-          agent_email: settings.agent_email || "",
-        }));
-      }
-    } catch (error) {
-      console.error("Error loading agent settings:", error);
-    }
-  };
-
-  const saveAgentSettings = async () => {
-    try {
-      const settings = {
-        agent1_name: formData.agent1_name,
-        agent1_phone: formData.agent1_phone,
-        agent2_name: formData.agent2_name,
-        agent2_phone: formData.agent2_phone,
-        agent_email: formData.agent_email,
-      };
-      await axios.post(`${API}/agent-settings`, settings);
-      toast.success("Agent contact details saved!");
-    } catch (error) {
-      console.error("Error saving agent settings:", error);
-      toast.error("Failed to save agent settings");
-    }
-  };
-
-  const handleExportProperties = async () => {
-    try {
-      toast.info("Exporting properties to CSV...");
-      const response = await axios.get(`${API}/properties/export/csv`, {
-        responseType: 'blob'
-      });
-      const blob = new Blob([response.data], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `properties_export_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      toast.success("Properties exported successfully!");
-    } catch (error) {
-      console.error("Error exporting properties:", error);
-      toast.error("Failed to export properties");
-    }
-  };
 
   const fetchProperties = async () => {
     setLoading(true);
     try {
-      // Send user email header for user-specific filtering
       const headers: Record<string, string> = {};
       if (userEmail) {
         headers['x-user-email'] = userEmail;
       }
-      const response = await axios.get(`${API}/properties`, { headers });
-      const activeProperties = response.data.filter((prop: Property) => prop.status !== "sold");
+      const response = await fetch(`${API}/properties`, { headers });
+      if (!response.ok) {
+        console.error(`HTTP error fetching properties: ${response.status}`);
+        return;
+      }
+      const data = await response.json();
+      const activeProperties = data.filter((prop: Property) => prop.status !== "sold");
       setAllProperties(activeProperties);
       setProperties(activeProperties);
     } catch (error) {
@@ -430,27 +360,6 @@ export default function HomePage() {
     ));
   };
 
-  const handleDuplicate = (newProperty: Property) => {
-    setAllProperties(prev => [newProperty, ...prev]);
-    setProperties(prev => [newProperty, ...prev]);
-    toast.success('Property duplicated!');
-  };
-
-  const handleTemplateSelect = (template: any) => {
-    setFormData(prev => ({
-      ...prev,
-      beds: template.beds.toString(),
-      baths: template.baths.toString(),
-      carpark: template.carpark.toString(),
-      property_type: template.property_type,
-      features: template.features || '',
-      agent1_name: template.default_agent1_name || prev.agent1_name,
-      agent1_phone: template.default_agent1_phone || prev.agent1_phone,
-    }));
-    setShowTemplates(false);
-    toast.success(`Template "${template.name}" applied!`);
-  };
-
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
     const newFilters = { ...filters, [key]: value };
     setFilters(newFilters);
@@ -475,11 +384,9 @@ export default function HomePage() {
 
   // Initialize Google Map when view switches to map
   useEffect(() => {
-    // Add a small delay to ensure the DOM element is rendered
     if (activeView === "map" && googleLoaded) {
       const timer = setTimeout(() => {
         if (mapContainerRef.current && !mapRef.current) {
-          // Default to Sydney, Australia
           const defaultCenter = { lat: -33.8688, lng: 151.2093 };
 
           mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
@@ -498,15 +405,12 @@ export default function HomePage() {
   // Update markers when properties change or view switches to map
   useEffect(() => {
     if (activeView === "map" && googleLoaded && properties.length > 0) {
-      // Wait for map to be initialized
       const timer = setTimeout(() => {
         if (!mapRef.current) return;
 
-        // Clear existing markers
         markersRef.current.forEach(marker => marker.setMap(null));
         markersRef.current = [];
 
-        // Geocode and add markers for each property
         const geocoder = new window.google.maps.Geocoder();
         const bounds = new window.google.maps.LatLngBounds();
         let geocodedCount = 0;
@@ -534,7 +438,6 @@ export default function HomePage() {
                   }
                 });
 
-                // Info window with property details
                 const infoWindow = new window.google.maps.InfoWindow({
                   content: `
                     <div style="padding: 8px; max-width: 250px;">
@@ -554,10 +457,8 @@ export default function HomePage() {
 
                 markersRef.current.push(marker);
 
-                // Fit bounds once all properties have been geocoded
                 if (geocodedCount === properties.length && markersRef.current.length > 0) {
                   mapRef.current?.fitBounds(bounds);
-                  // Don't zoom in too much for single marker
                   const listener = window.google.maps.event.addListener(mapRef.current!, "idle", () => {
                     if (mapRef.current!.getZoom()! > 15) {
                       mapRef.current!.setZoom(15);
@@ -569,257 +470,25 @@ export default function HomePage() {
             });
           }
         });
-      }, 200); // Wait for map to be initialized
+      }, 200);
 
       return () => clearTimeout(timer);
     }
   }, [activeView, properties, googleLoaded]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleAddProperty = () => {
+    setEditingProperty(null);
+    setShowPropertyEdit(true);
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-
-    // Reset input immediately so same file can be selected again
-    e.target.value = '';
-
-    if (files.length === 0) {
-      return;
-    }
-
-    const totalImages = formData.images.length + files.length;
-    if (totalImages > 25) {
-      toast.error("Maximum 25 images allowed");
-      return;
-    }
-
-    const loadingToast = toast.loading(`Uploading ${files.length} image(s)...`);
-
-    try {
-      // Upload to Azure Blob Storage
-      const formDataUpload = new FormData();
-      files.forEach((file) => formDataUpload.append('files', file));
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formDataUpload,
-      });
-
-      if (!response.ok) {
-        // Handle non-JSON error responses (like "Forbidden")
-        const contentType = response.headers.get('content-type');
-        const status = response.status;
-
-        let errorMessage = '';
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || 'Upload failed';
-        } else {
-          const errorText = await response.text();
-          errorMessage = errorText || '';
-        }
-
-        // Provide user-friendly messages with troubleshooting info
-        if (status === 403 || errorMessage.toLowerCase().includes('forbidden')) {
-          throw new Error(`Upload blocked (Error 403). This may be caused by: your network/firewall, VPN, or browser extensions. Try: 1) Disable VPN/ad-blockers 2) Try a different network 3) Use mobile data. [${errorMessage.slice(0, 50)}]`);
-        } else if (status === 413) {
-          throw new Error('File too large. Please use smaller images (max 4.5MB each).');
-        } else if (status === 401) {
-          throw new Error('Session expired. Please refresh the page and log in again.');
-        } else {
-          throw new Error(`Upload failed (${status}): ${errorMessage.slice(0, 100)}`);
-        }
-      }
-
-      const data = await response.json();
-
-      toast.dismiss(loadingToast);
-      toast.success(`${files.length} image(s) uploaded`);
-
-      setFormData((prev) => ({
-        ...prev,
-        images: [...prev.images, ...data.urls],
-      }));
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      console.error('Error uploading images:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to upload images');
-    }
+  const handleEditProperty = (property: Property, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingProperty(property);
+    setShowPropertyEdit(true);
   };
 
-  const removeImage = useCallback((index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.beds || !formData.baths || !formData.carpark || !formData.location || !formData.property_type) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
-    // Check payload size before saving (Vercel has 4.5MB limit)
-    // Note: Images are now stored as Azure Blob URLs, so only check report text sizes
-    const estimatedSize = (rpDataText?.length || 0) + (additionalReportText?.length || 0);
-    const maxSize = 4 * 1024 * 1024; // 4MB limit (leaving buffer)
-
-    if (estimatedSize > maxSize) {
-      const sizeMB = (estimatedSize / (1024 * 1024)).toFixed(1);
-      toast.error(`Total data size (${sizeMB}MB) exceeds maximum upload limit of 4MB. Please reduce report sizes.`);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const selectedPackageData = marketingPackages.find(pkg => pkg.id === selectedPackage);
-
-      const payload = {
-        beds: parseInt(formData.beds),
-        baths: parseInt(formData.baths),
-        carpark: parseInt(formData.carpark),
-        location: formData.location,
-        price: formData.price ? parseFloat(formData.price) : null,
-        size: formData.size ? parseFloat(formData.size) : null,
-        property_type: formData.property_type || null,
-        features: formData.features || null,
-        strata_body_corps: formData.strata_body_corps ? parseFloat(formData.strata_body_corps) : null,
-        council_rates: formData.council_rates ? parseFloat(formData.council_rates) : null,
-        marketing_package: selectedPackage || null,
-        marketing_cost: selectedPackageData ? selectedPackageData.price : null,
-        images: formData.images,
-        agent1_name: formData.agent1_name || null,
-        agent1_phone: formData.agent1_phone || null,
-        agent2_name: formData.agent2_name || null,
-        agent2_phone: formData.agent2_phone || null,
-        agent_email: formData.agent_email || null,
-        rp_data_report: rpDataText || null,
-        additional_report: additionalReportText || null,
-        user_email: userEmail || null,
-        neighbouring_suburb: formData.neighbouring_suburb || null,
-        neighbouring_postcode: formData.neighbouring_postcode || null,
-        neighbouring_state: formData.neighbouring_state || null,
-      };
-
-      if (editingId) {
-        await axios.put(`${API}/properties/${editingId}`, payload);
-        toast.success("Property updated successfully!");
-        setEditingId(null);
-      } else {
-        await axios.post(`${API}/properties`, payload);
-        toast.success("Property added successfully!");
-      }
-
-      const agentDetails = {
-        agent1_name: formData.agent1_name,
-        agent1_phone: formData.agent1_phone,
-        agent2_name: formData.agent2_name,
-        agent2_phone: formData.agent2_phone,
-        agent_email: formData.agent_email,
-      };
-
-      setFormData({
-        beds: "",
-        baths: "",
-        carpark: "",
-        location: "",
-        price: "",
-        size: "",
-        property_type: "",
-        features: "",
-        strata_body_corps: "",
-        council_rates: "",
-        images: [],
-        neighbouring_suburb: "",
-        neighbouring_postcode: "",
-        neighbouring_state: "",
-        ...agentDetails,
-      });
-
-      // Reset RP Data and Additional Report fields
-      setRpDataText("");
-      setAdditionalReportText("");
-
-      // Fetch updated properties list
-      await fetchProperties();
-    } catch (error: any) {
-      console.error("Error saving property:", error);
-      // Handle various error formats - Vercel may return plain text "Forbidden"
-      let errorMessage = "Failed to save property";
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.response?.status === 403) {
-        errorMessage = "Access denied. Please try logging in again.";
-      } else if (typeof error.response?.data === 'string' && error.response.data.includes('Forbidden')) {
-        errorMessage = "Access denied. Please try logging in again.";
-      }
-      toast.error(errorMessage);
-      setLoading(false);
-    }
-  };
-
-  const handleEdit = (property: Property) => {
-    setEditingId(property.id);
-    setFormData({
-      beds: property.beds.toString(),
-      baths: property.baths.toString(),
-      carpark: property.carpark.toString(),
-      location: property.location,
-      price: property.price ? property.price.toString() : "",
-      size: property.size ? property.size.toString() : "",
-      property_type: property.property_type || "",
-      features: property.features || "",
-      strata_body_corps: property.strata_body_corps ? property.strata_body_corps.toString() : "",
-      council_rates: property.council_rates ? property.council_rates.toString() : "",
-      images: property.images || [],
-      agent1_name: property.agent1_name || "",
-      agent1_phone: property.agent1_phone || "",
-      agent2_name: property.agent2_name || "",
-      agent2_phone: property.agent2_phone || "",
-      agent_email: property.agent_email || "",
-      neighbouring_suburb: property.neighbouring_suburb || "",
-      neighbouring_postcode: property.neighbouring_postcode || "",
-      neighbouring_state: property.neighbouring_state || "",
-    });
-    // Load RP Data and Additional Report from property
-    setRpDataText(property.rp_data_report || "");
-    setAdditionalReportText(property.additional_report || "");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    loadAgentSettings();
-    setFormData((prev) => ({
-      beds: "",
-      baths: "",
-      carpark: "",
-      location: "",
-      price: "",
-      size: "",
-      property_type: "",
-      features: "",
-      strata_body_corps: "",
-      council_rates: "",
-      images: [],
-      agent1_name: prev.agent1_name,
-      agent1_phone: prev.agent1_phone,
-      agent2_name: prev.agent2_name,
-      agent2_phone: prev.agent2_phone,
-      agent_email: prev.agent_email,
-      neighbouring_suburb: "",
-      neighbouring_postcode: "",
-      neighbouring_state: "",
-    }));
-    // Reset RP Data and Additional Report fields
-    setRpDataText("");
-    setAdditionalReportText("");
+  const handlePropertySaved = () => {
+    fetchProperties();
   };
 
   const handleDelete = async (propertyId: string, e: React.MouseEvent) => {
@@ -828,128 +497,36 @@ export default function HomePage() {
       return;
     }
     try {
-      await axios.delete(`${API}/properties/${propertyId}`);
+      const response = await fetch(`${API}/properties/${propertyId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       toast.success("Property deleted successfully!");
       fetchProperties();
-      if (editingId === propertyId) {
-        handleCancelEdit();
-      }
     } catch (error) {
       console.error("Error deleting property:", error);
       toast.error("Failed to delete property");
     }
   };
 
-  // Extract text from PDF file using backend endpoint
-  const extractTextFromPdf = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await axios.post(`${API}/properties/extract-pdf-text`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-
-    if (!response.data.success || !response.data.text) {
-      throw new Error('Failed to extract text from PDF');
-    }
-
-    return response.data.text;
-  };
-
-  // Handle RP Data upload/save
-  const handleRpDataSave = async (data: { type: "pdf" | "text"; file?: File; text?: string }) => {
-    setUploadingRpData(true);
-    try {
-      if (data.type === "pdf" && data.file) {
-        const extractedText = await extractTextFromPdf(data.file);
-        setRpDataText(extractedText);
-        toast.success("PDF text extracted successfully!");
-      } else if (data.type === "text" && data.text) {
-        setRpDataText(data.text);
-        toast.success("RP Data saved!");
-      }
-      setShowRpDataModal(false);
-    } catch (error: any) {
-      console.error("Error extracting PDF text:", error);
-      let errorMessage = "Failed to extract text from PDF. Please try pasting the text instead.";
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.response?.status === 403 || (typeof error.response?.data === 'string' && error.response.data.includes('Forbidden'))) {
-        errorMessage = "Access denied. Please try logging in again.";
-      }
-      toast.error(errorMessage);
-    } finally {
-      setUploadingRpData(false);
-    }
-  };
-
-  // Handle Additional Report upload/save
-  const handleAdditionalReportSave = async (data: { type: "pdf" | "text"; file?: File; text?: string }) => {
-    setUploadingAdditionalReport(true);
-    try {
-      if (data.type === "pdf" && data.file) {
-        const extractedText = await extractTextFromPdf(data.file);
-        setAdditionalReportText(extractedText);
-        toast.success("PDF text extracted successfully!");
-      } else if (data.type === "text" && data.text) {
-        setAdditionalReportText(data.text);
-        toast.success("Additional Report saved!");
-      }
-      setShowAdditionalReportModal(false);
-    } catch (error: any) {
-      console.error("Error extracting PDF text:", error);
-      let errorMessage = "Failed to extract text from PDF. Please try pasting the text instead.";
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.response?.status === 403 || (typeof error.response?.data === 'string' && error.response.data.includes('Forbidden'))) {
-        errorMessage = "Access denied. Please try logging in again.";
-      }
-      toast.error(errorMessage);
-    } finally {
-      setUploadingAdditionalReport(false);
-    }
-  };
-
-  // Style constants for inputs
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '12px 16px',
-    backgroundColor: 'white',
-    border: '1px solid #e5e7eb',
-    borderRadius: '8px',
-    color: '#111827',
-    fontSize: '14px',
-    outline: 'none',
-  };
-
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: '8px',
-  };
-
-  // Keep Tailwind classes as backup
-  const inputClass = "w-full bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all";
-  const labelClass = "block text-sm font-semibold text-gray-700";
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* Google Maps Script */}
       <Script
         src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
         strategy="afterInteractive"
         onLoad={() => {
-          console.log("Google Maps API loaded successfully");
           setGoogleLoaded(true);
         }}
         onError={(e) => {
           console.error("Failed to load Google Maps API:", e);
         }}
       />
+
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -958,7 +535,7 @@ export default function HomePage() {
               <span className="text-xl font-bold text-cyan-500">PropertyPitch</span>
             </div>
 
-            {/* Desktop Navigation Buttons - hidden on mobile */}
+            {/* Desktop Navigation Buttons */}
             <div className="hidden md:flex items-center gap-2">
               <button
                 onClick={() => router.push('/portfolio-import')}
@@ -976,11 +553,14 @@ export default function HomePage() {
               </button>
               <button
                 onClick={() => router.push('/admin')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-200 transition-all whitespace-nowrap"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all whitespace-nowrap"
               >
                 <Settings className="w-4 h-4" />
                 Admin
               </button>
+
+              {/* Dark Mode Toggle */}
+              <DarkModeToggle />
 
               {/* User Avatar & Menu - Desktop */}
               <div className="relative">
@@ -1002,14 +582,14 @@ export default function HomePage() {
 
                 {/* Dropdown Menu */}
                 {showUserMenu && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-sm font-semibold text-gray-900">{userName}</p>
-                      <p className="text-xs text-gray-500 truncate">{userEmail}</p>
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{userName}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
                     </div>
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
                       <LogOut className="w-4 h-4" />
                       Sign out
@@ -1021,10 +601,9 @@ export default function HomePage() {
 
             {/* Mobile: User Avatar + Hamburger Menu */}
             <div className="flex md:hidden items-center gap-2">
-              {/* User Avatar - Mobile */}
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all"
+                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
               >
                 {userPicture ? (
                   <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover" />
@@ -1035,15 +614,14 @@ export default function HomePage() {
                 )}
               </button>
 
-              {/* Hamburger Menu Button */}
               <button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-all"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
               >
                 {showMobileMenu ? (
-                  <X className="w-6 h-6 text-gray-700" />
+                  <X className="w-6 h-6 text-gray-700 dark:text-gray-300" />
                 ) : (
-                  <Menu className="w-6 h-6 text-gray-700" />
+                  <Menu className="w-6 h-6 text-gray-700 dark:text-gray-300" />
                 )}
               </button>
             </div>
@@ -1051,7 +629,7 @@ export default function HomePage() {
 
           {/* Mobile Menu Dropdown */}
           {showMobileMenu && (
-            <div className="md:hidden border-t border-gray-200 py-3 space-y-2">
+            <div className="md:hidden border-t border-gray-200 dark:border-gray-700 py-3 space-y-2">
               <button
                 onClick={() => { router.push('/portfolio-import'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg"
@@ -1068,7 +646,7 @@ export default function HomePage() {
               </button>
               <button
                 onClick={() => { router.push('/admin'); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg"
+                className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-semibold rounded-lg"
               >
                 <Settings className="w-5 h-5" />
                 Admin
@@ -1078,16 +656,16 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* User Menu Dropdown - Mobile (positioned below header) */}
+      {/* User Menu Dropdown - Mobile */}
       {showUserMenu && (
-        <div className="md:hidden fixed left-4 right-4 top-[72px] bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900">{userName}</p>
-            <p className="text-xs text-gray-500 truncate">{userEmail}</p>
+        <div className="md:hidden fixed left-4 right-4 top-[72px] bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">{userName}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
             <LogOut className="w-4 h-4" />
             Sign out
@@ -1098,7 +676,7 @@ export default function HomePage() {
       {/* Click outside to close menus */}
       {(showUserMenu || showMobileMenu) && (
         <div
-          className="fixed inset-0 z-40"
+          className="fixed inset-0 z-30"
           onClick={() => {
             setShowUserMenu(false);
             setShowMobileMenu(false);
@@ -1109,38 +687,25 @@ export default function HomePage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Search Bar and Filters */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 sm:mb-8 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 p-4 transition-colors">
           {/* Search Input and Quick Actions */}
           <div className="flex gap-3 items-center flex-wrap">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
+                ref={searchInputRef}
                 type="text"
-                placeholder="Search properties by location, type, or features..."
+                placeholder="Search properties... (Press / to focus)"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
               />
             </div>
-
-            {/* Favourites Toggle */}
-            <button
-              onClick={handleFavouritesToggle}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all ${
-                showFavouritesOnly
-                  ? "bg-amber-500 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-              title="Show favourites only"
-            >
-              <Star className={`w-5 h-5 ${showFavouritesOnly ? 'fill-white' : ''}`} />
-              <span className="hidden sm:inline">Starred</span>
-            </button>
 
             {/* Batch Export */}
             <button
               onClick={() => setShowBatchExport(true)}
-              className="flex items-center gap-2 px-4 py-3 rounded-lg font-semibold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-all"
+              className="flex items-center gap-2 px-4 py-3 rounded-lg font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all"
               title="Export multiple PDFs"
             >
               <Download className="w-5 h-5" />
@@ -1153,7 +718,7 @@ export default function HomePage() {
               className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all ${
                 showFilters || activeFilterCount > 0
                   ? "bg-cyan-500 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
               }`}
             >
               <Filter className="w-5 h-5" />
@@ -1168,15 +733,15 @@ export default function HomePage() {
 
           {/* Expandable Filters */}
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {/* Property Type */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Property Type</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Property Type</label>
                   <select
                     value={filters.propertyType}
                     onChange={(e) => handleFilterChange("propertyType", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   >
                     <option value="">All Types</option>
                     <option value="House">House</option>
@@ -1193,35 +758,35 @@ export default function HomePage() {
 
                 {/* Min Price */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Min Price</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Min Price</label>
                   <input
                     type="number"
                     placeholder="$0"
                     value={filters.minPrice}
                     onChange={(e) => handleFilterChange("minPrice", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                 </div>
 
                 {/* Max Price */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Max Price</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Max Price</label>
                   <input
                     type="number"
                     placeholder="No max"
                     value={filters.maxPrice}
                     onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                 </div>
 
                 {/* Min Beds */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Min Beds</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Min Beds</label>
                   <select
                     value={filters.minBeds}
                     onChange={(e) => handleFilterChange("minBeds", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   >
                     <option value="">Any</option>
                     <option value="1">1+</option>
@@ -1234,11 +799,11 @@ export default function HomePage() {
 
                 {/* Max Beds */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Max Beds</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Max Beds</label>
                   <select
                     value={filters.maxBeds}
                     onChange={(e) => handleFilterChange("maxBeds", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   >
                     <option value="">Any</option>
                     <option value="1">1</option>
@@ -1251,11 +816,11 @@ export default function HomePage() {
 
                 {/* Min Baths */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Min Baths</label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Min Baths</label>
                   <select
                     value={filters.minBaths}
                     onChange={(e) => handleFilterChange("minBaths", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   >
                     <option value="">Any</option>
                     <option value="1">1+</option>
@@ -1281,482 +846,34 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Property Form */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 sm:mb-8 p-4 sm:p-6 lg:p-8">
-          <div className="flex items-start justify-between mb-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-              {editingId ? "Edit Property" : "List Your Property"}
-            </h2>
-            {!editingId && (
-              <button
-                type="button"
-                onClick={() => setShowTemplates(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg font-semibold hover:bg-purple-200 transition-all text-sm"
-              >
-                <LayoutTemplate className="w-4 h-4" />
-                Use Template
-              </button>
-            )}
-          </div>
-          <p className="text-gray-500 mb-6 sm:mb-8 text-sm sm:text-base">
-            {editingId ? "Update property details" : "Add property details and generate an AI-powered selling pitch"}
-          </p>
-
-          <form onSubmit={handleSubmit}>
-            {/* Property Details Grid - responsive: 1 col mobile, 2 col tablet, 4 col desktop */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-              <div>
-                <label style={labelStyle}>Bedrooms *</label>
-                <input
-                  type="number"
-                  name="beds"
-                  value={formData.beds}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 4"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Bathrooms *</label>
-                <input
-                  type="number"
-                  name="baths"
-                  value={formData.baths}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 2"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Car Parks *</label>
-                <input
-                  type="number"
-                  name="carpark"
-                  value={formData.carpark}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 2"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Price ($)</label>
-                <input
-                  type="number"
-                  name="price"
-                  value={formData.price}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 850000"
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Size (sqm)</label>
-                <input
-                  type="number"
-                  name="size"
-                  value={formData.size}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 250"
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Property Type *</label>
-                <select
-                  name="property_type"
-                  value={formData.property_type}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  required
-                >
-                  <option value="">Select type</option>
-                  <option value="House">House</option>
-                  <option value="Apartment">Apartment</option>
-                  <option value="Unit">Unit</option>
-                  <option value="Townhouse">Townhouse</option>
-                  <option value="Villa">Villa</option>
-                  <option value="Land">Land</option>
-                  <option value="Acreage">Acreage</option>
-                  <option value="Rural Property">Rural Property</option>
-                  <option value="Block of Units">Block of Units</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={labelStyle}>Strata/Body Corps ($)</label>
-                <input
-                  type="number"
-                  name="strata_body_corps"
-                  value={formData.strata_body_corps}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 1200"
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label style={labelStyle}>Council Rates ($)</label>
-                <input
-                  type="number"
-                  name="council_rates"
-                  value={formData.council_rates}
-                  onChange={handleInputChange}
-                  style={inputStyle}
-                  placeholder="e.g., 2500"
-                  min="0"
-                />
-              </div>
-            </div>
-
-            {/* Marketing Package */}
-            {marketingPackages.length > 0 && (
-              <div className="mb-6">
-                <label className={labelClass}>Marketing Package (Optional)</label>
-                <select
-                  value={selectedPackage}
-                  onChange={(e) => setSelectedPackage(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">No marketing package</option>
-                  {marketingPackages.map(pkg => (
-                    <option key={pkg.id} value={pkg.id}>
-                      {pkg.name} - ${pkg.price.toLocaleString()} {pkg.description && `(${pkg.description})`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Location with Google Places Autocomplete */}
-            <div className="mb-6 relative">
-              <label className={labelClass}>Location *</label>
-              <input
-                ref={locationInputRef}
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleInputChange}
-                style={inputStyle}
-                placeholder="Start typing an address..."
-                required
-                autoComplete="off"
-              />
-              {!googleLoaded && (
-                <p className="text-xs text-gray-400 mt-1">Loading address suggestions...</p>
-              )}
-            </div>
-
-            {/* Neighbouring Suburb for Additional Comparables */}
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-3">
-                <MapPin className="w-4 h-4 text-blue-600" />
-                <h4 className="text-sm font-semibold text-blue-800">Neighbouring Suburb (Optional)</h4>
-              </div>
-              <p className="text-xs text-blue-600 mb-3">
-                Add a nearby suburb to include additional comparable sales in the historic property sales analysis.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-blue-700 mb-1">Suburb</label>
-                  <input
-                    type="text"
-                    name="neighbouring_suburb"
-                    value={formData.neighbouring_suburb}
-                    onChange={handleInputChange}
-                    style={inputStyle}
-                    placeholder="e.g., North Ward"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-blue-700 mb-1">Postcode</label>
-                  <input
-                    type="text"
-                    name="neighbouring_postcode"
-                    value={formData.neighbouring_postcode}
-                    onChange={handleInputChange}
-                    style={inputStyle}
-                    placeholder="e.g., 4810"
-                    maxLength={4}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-blue-700 mb-1">State</label>
-                  <select
-                    name="neighbouring_state"
-                    value={formData.neighbouring_state}
-                    onChange={handleInputChange}
-                    style={inputStyle}
-                  >
-                    <option value="">Select state</option>
-                    <option value="QLD">QLD</option>
-                    <option value="NSW">NSW</option>
-                    <option value="VIC">VIC</option>
-                    <option value="SA">SA</option>
-                    <option value="WA">WA</option>
-                    <option value="TAS">TAS</option>
-                    <option value="NT">NT</option>
-                    <option value="ACT">ACT</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Additional Features */}
-            <div className="mb-8">
-              <label className={labelClass}>Additional Features</label>
-              <textarea
-                name="features"
-                value={formData.features}
-                onChange={handleInputChange}
-                className={`${inputClass} min-h-[120px] resize-y`}
-                placeholder="e.g., Swimming pool, garden, modern kitchen, solar panels..."
-              />
-            </div>
-
-            {/* Agent Contact Section */}
-            <div className="mb-6 sm:mb-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-gray-900">Agent Contact Information</h3>
-                  <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                    Fill in and save your contact details - they&apos;ll auto-fill for all future properties
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={saveAgentSettings}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs sm:text-sm font-semibold rounded-lg hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-sm w-full sm:w-auto"
-                >
-                  <User className="w-4 h-4" />
-                  Save Contacts
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                {/* Agent 1 */}
-                <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl p-4 sm:p-6 border border-cyan-200">
-                  <div className="flex items-center gap-2 mb-4">
-                    <User className="w-5 h-5 text-cyan-600" />
-                    <h4 className="font-semibold text-cyan-700">Agent 1</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <label className={labelClass}>Name</label>
-                      <input
-                        type="text"
-                        name="agent1_name"
-                        value={formData.agent1_name}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                        placeholder="e.g., John Smith"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Phone Number</label>
-                      <input
-                        type="tel"
-                        name="agent1_phone"
-                        value={formData.agent1_phone}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                        placeholder="e.g., (555) 123-4567"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Agent 2 */}
-                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 sm:p-6 border border-emerald-200">
-                  <div className="flex items-center gap-2 mb-4">
-                    <User className="w-5 h-5 text-emerald-600" />
-                    <h4 className="font-semibold text-emerald-700">Agent 2</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <div>
-                      <label className={labelClass}>Name</label>
-                      <input
-                        type="text"
-                        name="agent2_name"
-                        value={formData.agent2_name}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                        placeholder="e.g., Jane Doe"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Phone Number</label>
-                      <input
-                        type="tel"
-                        name="agent2_phone"
-                        value={formData.agent2_phone}
-                        onChange={handleInputChange}
-                        className={inputClass}
-                        placeholder="e.g., (555) 987-6543"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Image Upload */}
-            <div className="mb-8">
-              <label className={labelClass}>Property Images (up to 25)</label>
-              <input
-                type="file"
-                accept="image/*,.heic,.heif"
-                multiple
-                onChange={handleImageUpload}
-                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 transition-all cursor-pointer"
-              />
-
-              {formData.images.length > 0 && (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-3 mt-4">
-                  {formData.images.map((img, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={img}
-                        alt={`Preview ${index + 1}`}
-                        className="w-full h-20 object-cover rounded-lg border border-gray-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(index)}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-md transition-colors"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* RP Data Report Section */}
-            <div style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '2px solid #fbbf24', borderRadius: '10px', padding: '1rem', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#78350f', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <FileText size={16} />
-                  RP Data Report
-                </h2>
-                {!rpDataText ? (
-                  <button type="button" onClick={() => setShowRpDataModal(true)} style={{ background: '#f59e0b', color: 'white', padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', width: '100%' }}>
-                    <DollarSign size={16} />
-                    Add RP Data
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => setRpDataText('')} style={{ background: '#ef4444', color: 'white', padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}>
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              <div style={{ background: 'white', padding: '1.5rem', borderRadius: '8px', textAlign: rpDataText ? 'left' : 'center' }}>
-                {!rpDataText ? (
-                  <>
-                    <p style={{ color: '#78350f', fontWeight: 600, marginBottom: '0.5rem' }}>Have personal access to RP Data?</p>
-                    <p style={{ color: '#92400e', fontSize: '0.9rem', marginBottom: '0' }}>If you have a personal RP Data subscription, you can add the report here to enhance your property evaluation with premium market data.</p>
-                    <p style={{ color: '#92400e', fontSize: '0.85rem', fontStyle: 'italic', marginTop: '0.5rem' }}>RP Data provides comprehensive property history, comparable sales, and market insights.</p>
-                  </>
-                ) : (
-                  <div style={{ whiteSpace: 'pre-wrap', color: '#0f172a', lineHeight: 1.8, fontSize: '0.9rem', maxHeight: '300px', overflowY: 'auto' }}>
-                    {rpDataText}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Additional Report Section */}
-            <div style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', border: '2px solid #60a5fa', borderRadius: '10px', padding: '1rem', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e40af', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <FileText size={16} />
-                  Additional Report
-                </h2>
-                {!additionalReportText ? (
-                  <button type="button" onClick={() => setShowAdditionalReportModal(true)} style={{ background: '#3b82f6', color: 'white', padding: '0.5rem 1rem', borderRadius: '8px', border: 'none', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.85rem', width: '100%' }}>
-                    <DollarSign size={16} />
-                    Add Report
-                  </button>
-                ) : (
-                  <button type="button" onClick={() => setAdditionalReportText('')} style={{ background: '#ef4444', color: 'white', padding: '0.4rem 0.75rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}>
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              <div style={{ background: 'white', padding: '1rem', borderRadius: '8px', textAlign: additionalReportText ? 'left' : 'center' }}>
-                {!additionalReportText ? (
-                  <>
-                    <p style={{ color: '#1e40af', fontWeight: 600, marginBottom: '0.5rem', fontSize: '0.9rem' }}>Add Additional Property Report</p>
-                    <p style={{ color: '#3b82f6', fontSize: '0.85rem' }}>Upload any additional property reports, valuations, or documents to enhance your property analysis.</p>
-                    <p style={{ color: '#3b82f6', fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>Supports PDF uploads or text paste for custom reports and data.</p>
-                  </>
-                ) : (
-                  <div style={{ whiteSpace: 'pre-wrap', color: '#0f172a', lineHeight: 1.8, fontSize: '0.85rem', maxHeight: '250px', overflowY: 'auto' }}>
-                    {additionalReportText}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Submit Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-3 sm:py-4 px-4 sm:px-6 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (editingId ? "Updating..." : "Adding Property...") : (editingId ? "Update Property" : "Add Property")}
-              </button>
-
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="px-6 sm:px-8 py-3 sm:py-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-base sm:text-lg rounded-xl transition-all"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-
         {/* Properties List */}
         <div>
-          {/* Header with Tabs */}
+          {/* Header with Add Button and Tabs */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-              Your Properties
-              <span className="ml-2 text-base font-normal text-gray-500">
-                ({properties.length} {properties.length === 1 ? "property" : "properties"})
-              </span>
-            </h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                Your Properties
+                <span className="ml-2 text-base font-normal text-gray-500 dark:text-gray-400">
+                  ({properties.length} {properties.length === 1 ? "property" : "properties"})
+                </span>
+              </h2>
+              <button
+                onClick={handleAddProperty}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md"
+              >
+                <Plus className="w-5 h-5" />
+                <span className="hidden sm:inline">Add Property</span>
+              </button>
+            </div>
 
             {/* View Tabs */}
-            <div className="flex bg-gray-100 rounded-lg p-1">
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
               <button
                 onClick={() => setActiveView("list")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
                   activeView === "list"
-                    ? "bg-white text-cyan-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white dark:bg-gray-600 text-cyan-600 dark:text-cyan-400 shadow-sm"
+                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 <List className="w-4 h-4" />
@@ -1766,8 +883,8 @@ export default function HomePage() {
                 onClick={() => setActiveView("map")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
                   activeView === "map"
-                    ? "bg-white text-cyan-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
+                    ? "bg-white dark:bg-gray-600 text-cyan-600 dark:text-cyan-400 shadow-sm"
+                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 <MapPin className="w-4 h-4" />
@@ -1777,25 +894,32 @@ export default function HomePage() {
           </div>
 
           {loading ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-16 text-center">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 sm:p-16 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">Loading properties...</h3>
-              <p className="text-gray-500 text-sm sm:text-base">Please wait while we fetch your properties</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">Loading properties...</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base">Please wait while we fetch your properties</p>
             </div>
           ) : properties.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-16 text-center">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 sm:p-16 text-center">
               <div className="text-4xl sm:text-6xl mb-4">🏠</div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">No properties yet</h3>
-              <p className="text-gray-500 text-sm sm:text-base">Add your first property above to get started</p>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">No properties yet</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base mb-6">Click the Add Property button to get started</p>
+              <button
+                onClick={handleAddProperty}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md"
+              >
+                <Plus className="w-5 h-5" />
+                Add Your First Property
+              </button>
             </div>
           ) : activeView === "map" ? (
             /* Map View */
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden relative">
               {!googleLoaded ? (
-                <div className="w-full h-[500px] sm:h-[600px] flex items-center justify-center bg-gray-100">
+                <div className="w-full h-[500px] sm:h-[600px] flex items-center justify-center bg-gray-100 dark:bg-gray-700">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto mb-3"></div>
-                    <p className="text-gray-500">Loading Google Maps...</p>
+                    <p className="text-gray-500 dark:text-gray-400">Loading Google Maps...</p>
                   </div>
                 </div>
               ) : (
@@ -1812,24 +936,18 @@ export default function HomePage() {
                 {paginatedProperties.map((property) => (
                   <div
                     key={property.id}
-                    className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
+                    className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
                     onClick={() => router.push(`/property/${property.id}`)}
                   >
-                    {/* Image with Favourite Badge */}
+                    {/* Image Carousel with Quick Preview */}
                     <div className="relative">
-                      {property.images && property.images.length > 0 ? (
-                        <img
-                          src={property.images[0]}
-                          alt={property.location}
-                          className="w-full h-40 sm:h-56 object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-40 sm:h-56 flex items-center justify-center bg-gray-100">
-                          <Building className="w-12 sm:w-16 h-12 sm:h-16 text-gray-300" />
-                        </div>
-                      )}
+                      <PropertyImageCarousel
+                        images={property.images || []}
+                        alt={property.location}
+                      />
+
                       {/* Quick Actions Overlay */}
-                      <div className="absolute top-2 right-2">
+                      <div className="absolute top-2 right-2 z-10">
                         <PropertyQuickActions
                           propertyId={property.id}
                           isFavourite={property.is_favourite}
@@ -1837,37 +955,75 @@ export default function HomePage() {
                           onFavouriteChange={(isFav) => handleFavouriteChange(property.id, isFav)}
                         />
                       </div>
-                      {/* Evaluation Badge */}
-                      {property.evaluation_report && (
-                        <div className="absolute bottom-2 left-2 bg-emerald-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
-                          Evaluated
+
+                      {/* Quick Stats Preview - Shows on Hover */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+                          <div className="flex flex-wrap gap-2 text-white text-xs sm:text-sm">
+                            {/* Days Listed */}
+                            {property.created_at && (
+                              <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full">
+                                <Clock className="w-3 h-3" />
+                                <span>{getDaysSince(property.created_at)} days</span>
+                              </div>
+                            )}
+
+                            {/* Valuation from comparables */}
+                            {property.comparables_data?.statistics?.price_range?.avg && (
+                              <div className="flex items-center gap-1 bg-emerald-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                                <TrendingUp className="w-3 h-3" />
+                                <span>${(property.comparables_data.statistics.price_range.avg / 1000).toFixed(0)}k avg</span>
+                              </div>
+                            )}
+
+                            {/* Evaluation Status */}
+                            {property.evaluation_report ? (
+                              <div className="flex items-center gap-1 bg-emerald-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                                <CheckCircle className="w-3 h-3" />
+                                <span>Evaluated</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 bg-amber-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                                <Clock className="w-3 h-3" />
+                                <span>Pending</span>
+                              </div>
+                            )}
+
+                            {/* Property Type */}
+                            {property.property_type && (
+                              <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full">
+                                <Building className="w-3 h-3" />
+                                <span>{property.property_type}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     <div className="p-4 sm:p-6">
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-1 sm:mb-2 line-clamp-2">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-1 sm:mb-2 line-clamp-2">
                         {property.location}
                       </h3>
 
                       {property.user_email && (
-                        <div className="flex items-center gap-1 text-xs text-gray-500 mb-2 sm:mb-3">
+                        <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-2 sm:mb-3">
                           <User className="w-3 h-3" />
                           <span className="truncate">{property.user_email}</span>
                         </div>
                       )}
 
-                      <div className="flex items-center gap-3 sm:gap-4 text-gray-600 mb-3 sm:mb-4">
+                      <div className="flex items-center gap-3 sm:gap-4 text-gray-600 dark:text-gray-300 mb-3 sm:mb-4">
                         <div className="flex items-center gap-1">
-                          <Bed className="w-4 h-4 text-gray-400" />
+                          <Bed className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                           <span className="text-xs sm:text-sm">{property.beds}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Bath className="w-4 h-4 text-gray-400" />
+                          <Bath className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                           <span className="text-xs sm:text-sm">{property.baths}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Car className="w-4 h-4 text-gray-400" />
+                          <Car className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                           <span className="text-xs sm:text-sm">{property.carpark}</span>
                         </div>
                       </div>
@@ -1880,10 +1036,7 @@ export default function HomePage() {
 
                       <div className="flex gap-2 sm:gap-3">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(property);
-                          }}
+                          onClick={(e) => handleEditProperty(property, e)}
                           className="flex-1 flex items-center justify-center gap-1 sm:gap-2 py-2 sm:py-3 px-3 sm:px-4 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold rounded-lg transition-colors"
                         >
                           <Edit className="w-4 h-4" />
@@ -1910,13 +1063,13 @@ export default function HomePage() {
                     disabled={currentPage === 1}
                     className={`w-full sm:w-auto px-4 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors ${
                       currentPage === 1
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-cyan-500 text-white hover:bg-cyan-600'
                     }`}
                   >
                     Previous
                   </button>
-                  <span className="text-gray-600 font-medium text-sm sm:text-base order-first sm:order-none">
+                  <span className="text-gray-600 dark:text-gray-400 font-medium text-sm sm:text-base order-first sm:order-none">
                     Page {currentPage} of {Math.ceil(properties.length / ITEMS_PER_PAGE)}
                   </span>
                   <button
@@ -1924,7 +1077,7 @@ export default function HomePage() {
                     disabled={currentPage === Math.ceil(properties.length / ITEMS_PER_PAGE)}
                     className={`w-full sm:w-auto px-4 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors ${
                       currentPage === Math.ceil(properties.length / ITEMS_PER_PAGE)
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                         : 'bg-cyan-500 text-white hover:bg-cyan-600'
                     }`}
                   >
@@ -1937,38 +1090,17 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* RP Data Modal */}
-      <ReportUploadModal
-        isOpen={showRpDataModal}
-        onClose={() => setShowRpDataModal(false)}
-        onUpload={handleRpDataSave}
-        title="Add RP Data Report"
-        description="Upload your RP Data report as a PDF file."
-        textPlaceholder="Paste your RP Data report here..."
-        accentColor="amber"
-        isUploading={uploadingRpData}
+      {/* Property Edit Modal */}
+      <PropertyEdit
+        property={editingProperty}
+        userEmail={userEmail}
+        onSave={handlePropertySaved}
+        onClose={() => {
+          setShowPropertyEdit(false);
+          setEditingProperty(null);
+        }}
+        isOpen={showPropertyEdit}
       />
-
-      {/* Additional Report Modal */}
-      <ReportUploadModal
-        isOpen={showAdditionalReportModal}
-        onClose={() => setShowAdditionalReportModal(false)}
-        onUpload={handleAdditionalReportSave}
-        title="Add Additional Report"
-        description="Upload your report as a PDF file."
-        textPlaceholder="Paste your report content here..."
-        accentColor="blue"
-        isUploading={uploadingAdditionalReport}
-      />
-
-      {/* Property Templates Modal */}
-      {showTemplates && (
-        <PropertyTemplates
-          onSelect={handleTemplateSelect}
-          onClose={() => setShowTemplates(false)}
-          userEmail={userEmail}
-        />
-      )}
 
       {/* Batch Export Modal */}
       {showBatchExport && (

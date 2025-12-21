@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Property } from '@/lib/types';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://backend-ts-gamma.vercel.app';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://propertyval-api.azurewebsites.net';
 
 interface RouteParams {
   params: Promise<{ propertyId: string }>;

@@ -3,6 +3,7 @@ import { Inter, Manrope } from "next/font/google";
 import { Toaster } from "sonner";
 import PWAInstall from "@/components/PWAInstall";
 import AuthProvider from "@/components/AuthProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -45,12 +46,14 @@ export default function RootLayout({
       <head>
         <link rel="apple-touch-icon" href="/icon-192.svg" />
       </head>
-      <body className={`${inter.variable} ${manrope.variable} antialiased`}>
-        <AuthProvider>
-          {children}
-          <Toaster position="top-right" />
-          <PWAInstall />
-        </AuthProvider>
+      <body className={`${inter.variable} ${manrope.variable} antialiased bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors`}>
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
+            <Toaster position="top-right" />
+            <PWAInstall />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

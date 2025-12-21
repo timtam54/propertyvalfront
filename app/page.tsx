@@ -150,10 +150,11 @@ export default function HomePage() {
         return;
       }
       try {
-        const response = await fetch(`${API}/auth/users/${encodeURIComponent(userEmail)}`);
+        const response = await fetch(`${API}/auth/users`);
         if (response.ok) {
-          const userData = await response.json();
-          setIsAdmin(userData.admin === true);
+          const data = await response.json();
+          const currentUser = data.users?.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
+          setIsAdmin(currentUser?.admin === true);
         } else {
           setIsAdmin(false);
         }

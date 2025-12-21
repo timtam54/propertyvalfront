@@ -320,7 +320,8 @@ export default function PropertyEvaluationPage() {
     setError(null);
 
     try {
-      const response = await fetch(`${API}/properties/${propertyId}/generate-evaluation-ad`, {
+      // Use local API route for ad generation (uses OpenAI)
+      const response = await fetch(`/api/properties/${propertyId}/generate-evaluation-ad`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -400,17 +401,46 @@ export default function PropertyEvaluationPage() {
     const reportText = property.evaluation_report;
     let marketValue: number | null = null;
 
+    // Try multiple patterns to find the valuation price
     const patterns = [
+      // Range patterns - extract the middle or upper value
+      /\$\s*([\d,]+)\s*(?:to|-)\s*\$\s*([\d,]+)/i, // $X to $Y or $X - $Y (captures both)
+      // Specific value patterns
       /Market\s*Value[:\s-]+\$\s*([\d,]+)/i,
       /Market\s*value\s*estimate[:\s-]+\$\s*([\d,]+)/i,
-      /Estimated\s*Value[:\s-]+\$\s*([\d,]+)/i,
+      /Estimated\s*(?:Market\s*)?Value[:\s-]+\$\s*([\d,]+)/i,
+      /Estimated\s*Value\s*Range[:\s\S]*?\$\s*([\d,]+)/i,
+      /valuation[:\s]+\$\s*([\d,]+)/i,
+      /valued?\s*at[:\s]+\$\s*([\d,]+)/i,
       /Mid[:\s-]+\$\s*([\d,]+)/i,
+      /estimate[:\s]+\$\s*([\d,]+)/i,
+      // Million patterns
+      /\$\s*([\d.]+)\s*million/i,
+      /\$\s*([\d.]+)\s*m\b/i,
     ];
 
     for (const pattern of patterns) {
       const match = reportText.match(pattern);
-      if (match && match[1]) {
-        const price = parseInt(match[1].replace(/,/g, ''));
+      if (match) {
+        let price: number;
+
+        // Check if it's a range pattern (has two capture groups with values)
+        if (match[2] && parseInt(match[2].replace(/,/g, '')) > 0) {
+          // It's a range - use the average of low and high
+          const low = parseInt(match[1].replace(/,/g, ''));
+          const high = parseInt(match[2].replace(/,/g, ''));
+          price = Math.round((low + high) / 2);
+        } else if (match[1]) {
+          // Check for million notation
+          if (pattern.toString().includes('million') || pattern.toString().includes('m\\b')) {
+            price = Math.round(parseFloat(match[1]) * 1000000);
+          } else {
+            price = parseInt(match[1].replace(/,/g, ''));
+          }
+        } else {
+          continue;
+        }
+
         if (price >= 100000 && price <= 50000000) {
           marketValue = price;
           break;
@@ -424,10 +454,11 @@ export default function PropertyEvaluationPage() {
     }
 
     try {
-      const response = await fetch(`${API}/properties/${propertyId}/apply-valuation`, {
-        method: 'POST',
+      // Use standard property update endpoint
+      const response = await fetch(`${API}/properties/${propertyId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ market_value: marketValue }),
+        body: JSON.stringify({ price: marketValue }),
       });
 
       if (!response.ok) {
@@ -604,8 +635,9 @@ export default function PropertyEvaluationPage() {
         updateData.price_upper = option.priceUpper;
       }
 
-      const response = await fetch(`${API}/properties/${propertyId}/apply-marketing-strategy`, {
-        method: 'POST',
+      // Use standard property update endpoint
+      const response = await fetch(`${API}/properties/${propertyId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       });

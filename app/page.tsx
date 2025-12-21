@@ -140,6 +140,24 @@ export default function HomePage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Fetch user admin status
+  useEffect(() => {
+    const fetchUserAdmin = async () => {
+      if (!userEmail) return;
+      try {
+        const response = await fetch(`${API}/auth/users/${encodeURIComponent(userEmail)}`);
+        if (response.ok) {
+          const userData = await response.json();
+          setIsAdmin(userData.admin === true);
+        }
+      } catch (err) {
+        console.error('Failed to fetch user admin status:', err);
+      }
+    };
+    fetchUserAdmin();
+  }, [userEmail]);
   // View and filter states
   const [activeView, setActiveView] = useState<"list" | "map">("list");
   const [showFilters, setShowFilters] = useState(false);
@@ -551,13 +569,15 @@ export default function HomePage() {
                 <CheckCircle className="w-4 h-4" />
                 Sold
               </button>
-              <button
-                onClick={() => router.push('/admin')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all whitespace-nowrap"
-              >
-                <Settings className="w-4 h-4" />
-                Admin
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all whitespace-nowrap"
+                >
+                  <Settings className="w-4 h-4" />
+                  Admin
+                </button>
+              )}
 
               {/* Dark Mode Toggle */}
               <DarkModeToggle />
@@ -644,13 +664,15 @@ export default function HomePage() {
                 <CheckCircle className="w-5 h-5" />
                 Sold Properties
               </button>
-              <button
-                onClick={() => { router.push('/admin'); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-semibold rounded-lg"
-              >
-                <Settings className="w-5 h-5" />
-                Admin
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => { router.push('/admin'); setShowMobileMenu(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-semibold rounded-lg"
+                >
+                  <Settings className="w-5 h-5" />
+                  Admin
+                </button>
+              )}
             </div>
           )}
         </div>

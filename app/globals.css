@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Enable dark mode with selector strategy */
+@custom-variant dark (&:where(.dark, .dark *));
+
 html {
   scroll-behavior: smooth;
 }

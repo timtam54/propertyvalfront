@@ -598,46 +598,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       // Already sorted by frontend, but sort again just in case
       soldProperties.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
     } else {
-      // FALLBACK: Scrape fresh data if no pre-calculated data provided
-      console.log(`[Evaluate] No pre-calculated data - scraping fresh from Homely...`);
+      // NO FALLBACK - The evaluation MUST use the same data shown in HistoricSalesCard
+      // If no data was passed, return an error so the frontend can retry
+      console.error(`[Evaluate] ERROR: No historicSales data received from frontend!`);
+      console.error(`[Evaluate] The HistoricSalesCard callback may not have fired yet.`);
+      console.error(`[Evaluate] Request body keys:`, Object.keys(requestBody));
 
-      try {
-        const { suburb, state, postcode } = parseLocation(property.location);
-        const propertyTypeFilter = property.property_type ? getPropertyTypeFilter(property.property_type) : null;
-
-        console.log(`[Evaluate] Scraping Homely for: ${suburb}, ${state}, ${postcode}, type: ${propertyTypeFilter}`);
-
-        const scrapedSales = await scrapeHomelyProperties(suburb, state, postcode, propertyTypeFilter);
-        console.log(`[Evaluate] Scraped ${scrapedSales.length} sales from Homely`);
-
-        // Simple similarity calculation for fallback (without weights API)
-        const propertyLat = property.latitude;
-        const propertyLng = property.longitude;
-
-        for (const sale of scrapedSales) {
-          let distance_km: number | null = null;
-          if (propertyLat && propertyLng && sale.latitude && sale.longitude) {
-            distance_km = calculateDistance(propertyLat, propertyLng, sale.latitude, sale.longitude);
-          }
-
-          const bedDiff = Math.abs((property.beds || 3) - (sale.beds || 3));
-          const bathDiff = Math.abs((property.baths || 2) - (sale.baths || 2));
-          let similarity = 100 - (bedDiff * 25) - (bathDiff * 20);
-          if (distance_km != null && distance_km < 0.5) similarity += 10;
-          if (distance_km != null && distance_km < 1) similarity += 5;
-          similarity = Math.max(0, Math.min(100, similarity));
-
-          soldProperties.push({
-            ...sale,
-            similarity_score: similarity,
-            distance_km: distance_km,
-          });
-        }
-
-        soldProperties.sort((a, b) => (b.similarity_score || 0) - (a.similarity_score || 0));
-      } catch (err) {
-        console.log(`[Evaluate] Error scraping historic sales:`, err);
-      }
+      return NextResponse.json(
+        {
+          detail: 'Historic sales data not loaded yet. Please wait for the Historic Property Sales section to load, then try again.',
+          error_code: 'HISTORIC_SALES_NOT_READY'
+        },
+        { status: 400 }
+      );
     }
 
     console.log(`[Evaluate] Using ${soldProperties.length} historic sales for valuation`);

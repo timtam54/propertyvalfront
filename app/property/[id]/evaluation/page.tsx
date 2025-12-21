@@ -194,7 +194,8 @@ export default function PropertyEvaluationPage() {
     setError(null);
     setWarning(null);
 
-    // Log the historic sales data being sent
+    // CRITICAL: Check that historic sales data is available
+    // The evaluation MUST use the same data shown in HistoricSalesCard
     console.log(`[EvaluatePage] Sending ${historicSalesData.length} historic sales to API`);
     if (historicSalesData.length > 0) {
       console.log(`[EvaluatePage] Top 3 sales being sent:`);
@@ -202,7 +203,10 @@ export default function PropertyEvaluationPage() {
         console.log(`  ${i + 1}. ${s.address} - $${s.price} - ${s.similarity}% match - ${s.distance}km`);
       });
     } else {
-      console.warn(`[EvaluatePage] WARNING: historicSalesData is EMPTY! The HistoricSalesCard callback may not have fired yet.`);
+      console.warn(`[EvaluatePage] WARNING: historicSalesData is EMPTY!`);
+      setError('Please wait for the Historic Property Sales section to load before evaluating.');
+      setEvaluating(false);
+      return;
     }
 
     try {

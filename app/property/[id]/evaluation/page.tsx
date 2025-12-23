@@ -8,6 +8,7 @@ import { API } from '@/lib/config';
 import { usePageView } from '@/hooks/useAudit';
 import ValuationQuality from '@/components/ValuationQuality';
 import HistoricSalesCard from '@/components/HistoricSalesCard';
+import DarkModeToggle from '@/components/DarkModeToggle';
 import type {
   ValuationHistoryEntry,
   ConfidenceScoring,
@@ -667,22 +668,22 @@ export default function PropertyEvaluationPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8fafc' }}>
-        <p style={{ fontSize: '1.2rem', color: '#64748b' }}>Loading property...</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <p className="text-lg text-gray-500 dark:text-gray-400">Loading property...</p>
       </div>
     );
   }
 
   if (!property) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8fafc' }}>
-        <p style={{ fontSize: '1.2rem', color: '#64748b' }}>Property not found</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
+        <p className="text-lg text-gray-500 dark:text-gray-400">Property not found</p>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       {/* Marketing Strategy Modal */}
       {showMarketingModal && (
         <>
@@ -800,26 +801,22 @@ export default function PropertyEvaluationPage() {
       )}
 
       {/* Header */}
-      <header style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: '0.75rem 1rem' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '1.5rem' }}>🏠</span>
-          <h1 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0ea5e9', margin: 0 }}>PropertyPitch</h1>
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+        <div className="max-w-[1200px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">🏠</span>
+            <h1 className="text-lg font-bold text-cyan-500">PropertyPitch</h1>
+          </div>
+          <DarkModeToggle />
         </div>
       </header>
 
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
+      <main className="max-w-[1200px] mx-auto p-4">
         {/* Back Button */}
-        <div style={{ marginBottom: '2rem' }}>
+        <div className="mb-8">
           <Link
             href={`/property/${propertyId}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              color: '#64748b',
-              textDecoration: 'none',
-              fontSize: '1rem',
-            }}
+            className="inline-flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-cyan-500 dark:hover:text-cyan-400 transition-colors"
           >
             ← Back to Property
           </Link>
@@ -862,19 +859,12 @@ export default function PropertyEvaluationPage() {
         )}
 
         {/* Property Summary Header */}
-        <div
-          style={{
-            marginBottom: '1rem',
-            padding: '1rem',
-            background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-            borderRadius: '12px',
-          }}
-        >
-          <h1 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.25rem', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="mb-4 p-4 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/40 dark:to-blue-800/40 rounded-xl">
+          <h1 className="text-xl font-bold mb-1 text-blue-900 dark:text-blue-200 flex items-center gap-2">
             💰 Property Valuation
           </h1>
-          <h2 style={{ fontSize: '1rem', color: '#1e40af', marginBottom: '0.75rem', wordBreak: 'break-word' }}>{property.location}</h2>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.9rem', color: '#1e40af' }}>
+          <h2 className="text-base text-blue-800 dark:text-blue-300 mb-3 break-words">{property.location}</h2>
+          <div className="flex gap-4 flex-wrap text-sm text-blue-800 dark:text-blue-300">
             <div>
               <strong>{property.beds}</strong> Bedrooms
             </div>
@@ -890,13 +880,13 @@ export default function PropertyEvaluationPage() {
               </div>
             )}
             {property.price && (
-              <div style={{ color: '#059669', fontWeight: '700' }}>Listed: ${property.price.toLocaleString()}</div>
+              <div className="text-emerald-600 dark:text-emerald-400 font-bold">Listed: ${property.price.toLocaleString()}</div>
             )}
           </div>
         </div>
 
         {/* Historic Sales Card - ALWAYS render to populate data before evaluation */}
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div className="mb-6 bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
           <HistoricSalesCard
             propertyId={propertyId}
             propertyLocation={property.location}
@@ -915,12 +905,12 @@ export default function PropertyEvaluationPage() {
 
         {/* Evaluation Section */}
         {!property.evaluation_report ? (
-          <div style={{ textAlign: 'center', padding: '1.5rem 1rem', background: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💰</div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.75rem', color: '#0f172a' }}>
+          <div className="text-center p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+            <div className="text-5xl mb-4">💰</div>
+            <h3 className="text-xl font-semibold mb-3 text-gray-900 dark:text-white">
               Get Your AI Property Valuation
             </h3>
-            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem', maxWidth: '600px', margin: '0 auto 1.5rem' }}>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-[600px] mx-auto">
               Our AI analyzes your property photos to detect improvements, then compares with market data.
             </p>
 

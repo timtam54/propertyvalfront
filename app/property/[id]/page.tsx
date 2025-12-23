@@ -13,6 +13,7 @@ import { API } from "@/lib/config";
 import ReportUploadModal from "@/components/ReportUploadModal";
 import HistoricSalesCard from "@/components/HistoricSalesCard";
 import { usePageView } from "@/hooks/useAudit";
+import DarkModeToggle from "@/components/DarkModeToggle";
 
 // Using a different Facebook icon to avoid deprecation warning
 const FacebookIcon = () => (
@@ -394,7 +395,7 @@ export default function PropertyDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
         <Loader2 className="animate-spin text-cyan-500" size={48} />
       </div>
     );
@@ -402,16 +403,16 @@ export default function PropertyDetailPage() {
 
   if (!property) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 flex items-center justify-center">
-        <p className="text-gray-600">Property not found</p>
+      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
+        <p className="text-gray-600 dark:text-gray-400">Property not found</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50">
+    <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
       {/* Header */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
+      <header className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Home className="text-cyan-500" size={24} />
@@ -424,10 +425,10 @@ export default function PropertyDetailPage() {
           <div className="hidden md:flex items-center gap-3">
             <button
               onClick={() => router.push('/')}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
             >
               <ArrowLeft size={16} />
-              Back to Properties
+              Back
             </button>
             <button
               onClick={() => router.push(`/property/${propertyId}/evaluation`)}
@@ -460,23 +461,28 @@ export default function PropertyDetailPage() {
               <Trash2 size={16} />
               Delete
             </button>
+            <DarkModeToggle />
           </div>
 
           {/* Mobile Menu Button */}
           <button
             onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
+            className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
-            <Menu size={24} className="text-gray-700" />
+            <Menu size={24} className="text-gray-700 dark:text-gray-300" />
           </button>
         </div>
 
         {/* Mobile Menu Dropdown */}
         {showMobileMenu && (
-          <div className="md:hidden bg-white border-t border-gray-100 px-4 py-3 space-y-2">
+          <div className="md:hidden bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between px-4 py-2 mb-2">
+              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
+              <DarkModeToggle />
+            </div>
             <button
               onClick={() => { router.push('/'); setShowMobileMenu(false); }}
-              className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg text-gray-700 font-medium"
+              className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-200 font-medium"
             >
               <ArrowLeft size={18} />
               Back to Properties
@@ -548,10 +554,10 @@ export default function PropertyDetailPage() {
         )}
 
         {/* Property Info */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
           {/* Location */}
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 flex items-start gap-2">
-            <MapPin size={24} className="text-gray-400 flex-shrink-0 mt-1" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-start gap-2">
+            <MapPin size={24} className="text-gray-400 dark:text-gray-500 flex-shrink-0 mt-1" />
             {property.location}
           </h1>
           {/* Coordinates */}
@@ -560,17 +566,17 @@ export default function PropertyDetailPage() {
               href={`https://www.google.com/maps/search/?api=1&query=${property.latitude},${property.longitude}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-gray-400 hover:text-purple-600 mb-4 inline-flex items-center gap-1 ml-8"
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-purple-600 dark:hover:text-purple-400 mb-4 inline-flex items-center gap-1 ml-8"
             >
               📍 {property.latitude.toFixed(6)}, {property.longitude.toFixed(6)}
               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </a>
           ) : (
-            <p className="text-xs text-gray-300 mb-4 ml-8">Fetching coordinates...</p>
+            <p className="text-xs text-gray-300 dark:text-gray-600 mb-4 ml-8">Fetching coordinates...</p>
           )}
 
           {/* Property Stats */}
-          <div className="flex flex-wrap gap-4 sm:gap-6 mb-4 text-gray-600">
+          <div className="flex flex-wrap gap-4 sm:gap-6 mb-4 text-gray-600 dark:text-gray-300">
             <div className="flex items-center gap-2">
               <Bed size={20} className="text-cyan-500" />
               <span><strong>{property.beds}</strong> Bedrooms</span>
@@ -593,14 +599,14 @@ export default function PropertyDetailPage() {
 
           {/* Property Type Badge */}
           {property.property_type && (
-            <span className="inline-block px-4 py-1.5 bg-cyan-50 text-cyan-600 rounded-full font-semibold text-sm">
+            <span className="inline-block px-4 py-1.5 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded-full font-semibold text-sm">
               {property.property_type}
             </span>
           )}
 
           {/* Sold Badge */}
           {property.status === "sold" && (
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-bold">
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-lg font-bold">
               <DollarSign size={18} />
               SOLD - ${property.sold_price?.toLocaleString()}
             </div>
@@ -609,14 +615,14 @@ export default function PropertyDetailPage() {
 
         {/* Features */}
         {property.features && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Features</h2>
-            <p className="text-gray-600 leading-relaxed">{property.features}</p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">Features</h2>
+            <p className="text-gray-600 dark:text-gray-300 leading-relaxed">{property.features}</p>
           </div>
         )}
 
         {/* Historic Sales in Area */}
-        <div className="bg-white mb-6">
+        <div className="bg-white dark:bg-gray-800 mb-6 rounded-2xl overflow-hidden">
           <HistoricSalesCard
             propertyId={propertyId}
             propertyLocation={property.location}
@@ -632,9 +638,9 @@ export default function PropertyDetailPage() {
         </div>
 
         {/* RP Data Report */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <span className="text-xl">📊</span>
               RP Data Report
             </h2>
@@ -658,20 +664,20 @@ export default function PropertyDetailPage() {
             </div>
           </div>
 
-          <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
+          <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-5 border border-amber-200 dark:border-amber-800">
             {!property.rp_data_report ? (
               <div className="text-center">
-                <p className="font-semibold text-amber-800 mb-2">Have personal access to RP Data?</p>
-                <p className="text-amber-700 text-sm mb-2">
+                <p className="font-semibold text-amber-800 dark:text-amber-300 mb-2">Have personal access to RP Data?</p>
+                <p className="text-amber-700 dark:text-amber-400 text-sm mb-2">
                   If you have a personal RP Data subscription, you can add the report here to enhance your property evaluation with premium market data.
                 </p>
-                <p className="text-amber-600 text-sm italic">
+                <p className="text-amber-600 dark:text-amber-500 text-sm italic">
                   RP Data provides comprehensive property history, comparable sales, and market insights.
                 </p>
               </div>
             ) : (
-              <div className="bg-white rounded-lg p-4 max-h-64 overflow-y-auto">
-                <pre className="whitespace-pre-wrap text-gray-700 text-sm leading-relaxed font-sans">
+              <div className="bg-white dark:bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto">
+                <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 text-sm leading-relaxed font-sans">
                   {property.rp_data_report}
                 </pre>
               </div>
@@ -680,9 +686,9 @@ export default function PropertyDetailPage() {
         </div>
 
         {/* Additional Report */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <span className="text-xl">📄</span>
               Additional Report
             </h2>
@@ -706,20 +712,20 @@ export default function PropertyDetailPage() {
             </div>
           </div>
 
-          <div className="bg-blue-50 rounded-xl p-5 border border-blue-200">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800">
             {!property.additional_report ? (
               <div className="text-center">
-                <p className="font-semibold text-blue-800 mb-2">Add Additional Property Report</p>
-                <p className="text-blue-700 text-sm mb-2">
+                <p className="font-semibold text-blue-800 dark:text-blue-300 mb-2">Add Additional Property Report</p>
+                <p className="text-blue-700 dark:text-blue-400 text-sm mb-2">
                   Upload any additional property reports, valuations, or documents to enhance your property analysis.
                 </p>
-                <p className="text-blue-600 text-sm italic">
+                <p className="text-blue-600 dark:text-blue-500 text-sm italic">
                   Supports PDF uploads or text paste for custom reports and data.
                 </p>
               </div>
             ) : (
-              <div className="bg-white rounded-lg p-4 max-h-64 overflow-y-auto">
-                <pre className="whitespace-pre-wrap text-gray-700 text-sm leading-relaxed font-sans">
+              <div className="bg-white dark:bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto">
+                <pre className="whitespace-pre-wrap text-gray-700 dark:text-gray-300 text-sm leading-relaxed font-sans">
                   {property.additional_report}
                 </pre>
               </div>
@@ -728,9 +734,9 @@ export default function PropertyDetailPage() {
         </div>
 
         {/* AI-Generated Selling Pitch */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">AI-Generated Selling Pitch</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">AI-Generated Selling Pitch</h2>
             {property.pitch && !isEditingPitch && (
               <div className="flex gap-2">
                 <button
@@ -765,12 +771,12 @@ export default function PropertyDetailPage() {
                 <textarea
                   value={editedPitch}
                   onChange={(e) => setEditedPitch(e.target.value)}
-                  className="w-full min-h-[200px] p-4 border-2 border-gray-200 rounded-xl text-gray-700 leading-relaxed resize-y focus:border-cyan-500 focus:outline-none"
+                  className="w-full min-h-[200px] p-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 leading-relaxed resize-y focus:border-cyan-500 focus:outline-none"
                 />
                 <div className="flex gap-3 mt-4">
                   <button
                     onClick={cancelEditingPitch}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                   >
                     <X size={16} />
                     Cancel
@@ -785,13 +791,13 @@ export default function PropertyDetailPage() {
                 </div>
               </div>
             ) : (
-              <div className="bg-gradient-to-br from-sky-50 to-emerald-50 p-5 rounded-xl border border-sky-100">
-                <p className="text-gray-700 leading-relaxed">{property.pitch}</p>
+              <div className="bg-gradient-to-br from-sky-50 to-emerald-50 dark:from-sky-900/20 dark:to-emerald-900/20 p-5 rounded-xl border border-sky-100 dark:border-sky-800">
+                <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{property.pitch}</p>
               </div>
             )
           ) : (
             <div className="text-center py-6">
-              <p className="text-gray-500 mb-4">Generate a professional, AI-powered selling pitch for this property.</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">Generate a professional, AI-powered selling pitch for this property.</p>
               <button
                 onClick={generatePitch}
                 disabled={generatingPitch}
@@ -805,17 +811,17 @@ export default function PropertyDetailPage() {
         </div>
 
         {/* Social Media Marketing */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Social Media Marketing</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Social Media Marketing</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Facebook Ad */}
-            <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
-              <h3 className="flex items-center gap-2 font-bold text-gray-900 mb-2">
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
+              <h3 className="flex items-center gap-2 font-bold text-gray-900 dark:text-white mb-2">
                 <FacebookIcon />
                 Facebook Ad
               </h3>
-              <p className="text-gray-500 text-sm mb-4">
+              <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
                 Create a paid Facebook ad with optimized copy, headline, and call-to-action.
               </p>
               <button
@@ -828,12 +834,12 @@ export default function PropertyDetailPage() {
             </div>
 
             {/* Facebook Post */}
-            <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
-              <h3 className="flex items-center gap-2 font-bold text-gray-900 mb-2">
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-5 border border-gray-200 dark:border-gray-600">
+              <h3 className="flex items-center gap-2 font-bold text-gray-900 dark:text-white mb-2">
                 <Share2 size={20} className="text-emerald-600" />
                 Facebook Post
               </h3>
-              <p className="text-gray-500 text-sm mb-4">
+              <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
                 Create an engaging organic post with all property details and photos.
               </p>
               <button

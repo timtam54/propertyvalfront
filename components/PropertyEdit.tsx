@@ -545,7 +545,7 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    padding: '12px 16px',
+    padding: '10px 12px',
     backgroundColor: 'white',
     border: '1px solid #e5e7eb',
     borderRadius: '8px',
@@ -556,10 +556,10 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
 
   const labelStyle: React.CSSProperties = {
     display: 'block',
-    fontSize: '14px',
+    fontSize: '12px',
     fontWeight: 600,
     color: '#374151',
-    marginBottom: '8px',
+    marginBottom: '4px',
   };
 
   const inputClass = "w-full bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all";
@@ -582,40 +582,40 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
-                {isEditing ? "Edit Property" : "Add New Property"}
+          <div className="flex items-start justify-between p-3 sm:p-4 lg:p-6 border-b border-gray-200 gap-2">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
+                {isEditing ? "Edit Property" : "Add Property"}
               </h2>
-              <p className="text-gray-500 text-sm mt-1">
-                {isEditing ? "Update property details" : "Add property details and generate an AI-powered selling pitch"}
+              <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 line-clamp-1">
+                {isEditing ? "Update property details" : "Add details for AI-powered pitch"}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {!isEditing && (
                 <button
                   type="button"
                   onClick={() => setShowTemplates(true)}
-                  className="flex items-center gap-2 px-3 py-2 bg-purple-100 text-purple-700 rounded-lg font-semibold hover:bg-purple-200 transition-all text-sm"
+                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-100 text-purple-700 rounded-lg font-semibold hover:bg-purple-200 transition-all text-xs sm:text-sm"
                 >
-                  <LayoutTemplate className="w-4 h-4" />
-                  <span className="hidden sm:inline">Use Template</span>
+                  <LayoutTemplate className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Template</span>
                 </button>
               )}
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <X className="w-6 h-6 text-gray-500" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" />
               </button>
             </div>
           </div>
 
           {/* Form Content */}
-          <div className="p-4 sm:p-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+          <div className="p-3 sm:p-4 lg:p-6 max-h-[calc(100vh-180px)] overflow-y-auto">
             <form onSubmit={handleSubmit}>
-              {/* Property Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
+              {/* Property Details Grid - 2 cols mobile, 4 cols tablet+ */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
                 <div>
                   <label style={labelStyle}>Bedrooms *</label>
                   <input
@@ -672,14 +672,20 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Size (sqm)</label>
+                  <label style={labelStyle}>
+                    {['Apartment', 'Unit', 'Townhouse'].includes(formData.property_type)
+                      ? 'Floor Area (sqm)'
+                      : 'Land Area (sqm)'}
+                  </label>
                   <input
                     type="number"
                     name="size"
                     value={formData.size}
                     onChange={handleInputChange}
                     style={inputStyle}
-                    placeholder="e.g., 250"
+                    placeholder={['Apartment', 'Unit', 'Townhouse'].includes(formData.property_type)
+                      ? "e.g., 85"
+                      : "e.g., 600"}
                     min="0"
                   />
                 </div>
@@ -761,7 +767,7 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
                 <p className="text-xs text-blue-600 mb-3">
                   Add a nearby suburb to include additional comparable sales in the historic property sales analysis.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                   <div>
                     <label className="block text-xs font-medium text-blue-700 mb-1">Suburb</label>
                     <input
@@ -785,7 +791,7 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
                       maxLength={4}
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <label className="block text-xs font-medium text-blue-700 mb-1">State</label>
                     <select
                       name="neighbouring_state"
@@ -821,31 +827,31 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
 
               {/* Agent Contact Section */}
               <div className="mb-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900">Agent Contact Information</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Fill in and save your contact details - they&apos;ll auto-fill for all future properties
+                <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-gray-900">Agent Contact</h3>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 sm:line-clamp-1">
+                      Save details to auto-fill for future properties
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={saveAgentSettings}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-semibold rounded-lg hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-sm"
+                    className="inline-flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-semibold rounded-lg hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-sm flex-shrink-0"
                   >
-                    <User className="w-4 h-4" />
-                    Save Contacts
+                    <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Save</span>
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {/* Agent 1 */}
-                  <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-xl p-4 border border-cyan-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <User className="w-4 h-4 text-cyan-600" />
-                      <h4 className="font-semibold text-cyan-700 text-sm">Agent 1</h4>
+                  <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-cyan-200">
+                    <div className="flex items-center gap-1.5 mb-2 sm:mb-3">
+                      <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-600" />
+                      <h4 className="font-semibold text-cyan-700 text-xs sm:text-sm">Agent 1</h4>
                     </div>
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-1 gap-2 sm:gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
                         <input
@@ -853,31 +859,31 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
                           name="agent1_name"
                           value={formData.agent1_name}
                           onChange={handleInputChange}
-                          className={`${inputClass} px-3 py-2 text-sm`}
-                          placeholder="e.g., John Smith"
+                          className={`${inputClass} px-2 sm:px-3 py-1.5 sm:py-2 text-sm`}
+                          placeholder="John Smith"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
                         <input
                           type="tel"
                           name="agent1_phone"
                           value={formData.agent1_phone}
                           onChange={handleInputChange}
-                          className={`${inputClass} px-3 py-2 text-sm`}
-                          placeholder="e.g., 0412 345 678"
+                          className={`${inputClass} px-2 sm:px-3 py-1.5 sm:py-2 text-sm`}
+                          placeholder="0412 345 678"
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* Agent 2 */}
-                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-4 border border-emerald-200">
-                    <div className="flex items-center gap-2 mb-3">
-                      <User className="w-4 h-4 text-emerald-600" />
-                      <h4 className="font-semibold text-emerald-700 text-sm">Agent 2</h4>
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-emerald-200">
+                    <div className="flex items-center gap-1.5 mb-2 sm:mb-3">
+                      <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
+                      <h4 className="font-semibold text-emerald-700 text-xs sm:text-sm">Agent 2</h4>
                     </div>
-                    <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-1 gap-2 sm:gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
                         <input
@@ -885,19 +891,19 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
                           name="agent2_name"
                           value={formData.agent2_name}
                           onChange={handleInputChange}
-                          className={`${inputClass} px-3 py-2 text-sm`}
-                          placeholder="e.g., Jane Doe"
+                          className={`${inputClass} px-2 sm:px-3 py-1.5 sm:py-2 text-sm`}
+                          placeholder="Jane Doe"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
                         <input
                           type="tel"
                           name="agent2_phone"
                           value={formData.agent2_phone}
                           onChange={handleInputChange}
-                          className={`${inputClass} px-3 py-2 text-sm`}
-                          placeholder="e.g., 0412 987 654"
+                          className={`${inputClass} px-2 sm:px-3 py-1.5 sm:py-2 text-sm`}
+                          placeholder="0412 987 654"
                         />
                       </div>
                     </div>
@@ -922,7 +928,7 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
                       <GripVertical className="w-3 h-3" />
                       Drag images to reorder. First image is the cover photo.
                     </p>
-                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
                       {formData.images.map((img, index) => (
                         <div
                           key={index}
@@ -1044,18 +1050,18 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
               </div>
 
               {/* Submit Buttons */}
-              <div className="flex gap-3 pt-4 border-t border-gray-200">
+              <div className="flex gap-2 sm:gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 py-3 px-6 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-bold text-base rounded-xl hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-2.5 sm:py-3 px-4 sm:px-6 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-bold text-sm sm:text-base rounded-xl hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? (isEditing ? "Saving..." : "Saving...") : (isEditing ? "Save Changes" : "Save Property")}
+                  {loading ? "Saving..." : (isEditing ? "Save Changes" : "Save Property")}
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-base rounded-xl transition-all"
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-sm sm:text-base rounded-xl transition-all"
                 >
                   Close
                 </button>

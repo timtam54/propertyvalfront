@@ -556,9 +556,9 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <div className="flex items-center gap-2">
-              <Home className="w-7 h-7 text-cyan-500" />
-              <span className="text-xl font-bold text-cyan-500">PropertyPitch</span>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Home className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-500" />
+              <span className="text-base sm:text-xl font-bold text-cyan-500">PropertyPitch</span>
             </div>
 
             {/* Desktop Navigation Buttons */}
@@ -658,6 +658,10 @@ export default function HomePage() {
           {/* Mobile Menu Dropdown */}
           {showMobileMenu && (
             <div className="md:hidden border-t border-gray-200 dark:border-gray-700 py-3 space-y-2">
+              <div className="flex items-center justify-between px-4 py-2 mb-2">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
+                <DarkModeToggle />
+              </div>
               <button
                 onClick={() => { router.push('/portfolio-import'); setShowMobileMenu(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg"
@@ -717,54 +721,60 @@ export default function HomePage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Search Bar and Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 p-4 transition-colors">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 p-3 sm:p-4 transition-colors">
           {/* Search Input and Quick Actions */}
-          <div className="flex gap-3 items-center flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            {/* Search Input - Full width on mobile */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search properties... (Press / to focus)"
+                placeholder="Search properties..."
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
+                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm sm:text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
               />
             </div>
 
-            {/* Batch Export */}
-            <button
-              onClick={() => setShowBatchExport(true)}
-              className="flex items-center gap-2 px-4 py-3 rounded-lg font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all"
-              title="Export multiple PDFs"
-            >
-              <Download className="w-5 h-5" />
-              <span className="hidden sm:inline">Export</span>
-            </button>
+            {/* Action Buttons - Side by side on mobile */}
+            <div className="flex gap-2">
+              {/* Batch Export */}
+              <button
+                onClick={() => setShowBatchExport(true)}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all text-sm sm:text-base"
+                title="Export multiple PDFs"
+              >
+                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="sm:hidden">Export</span>
+                <span className="hidden sm:inline">Export</span>
+              </button>
 
-            {/* Filters Button */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all ${
-                showFilters || activeFilterCount > 0
-                  ? "bg-cyan-500 text-white"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-              }`}
-            >
-              <Filter className="w-5 h-5" />
-              <span className="hidden sm:inline">Filters</span>
-              {activeFilterCount > 0 && (
-                <span className="bg-white text-cyan-600 text-xs font-bold px-2 py-0.5 rounded-full">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+              {/* Filters Button */}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-semibold transition-all text-sm sm:text-base ${
+                  showFilters || activeFilterCount > 0
+                    ? "bg-cyan-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                }`}
+              >
+                <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="sm:hidden">Filter</span>
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="bg-white text-cyan-600 text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Expandable Filters */}
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
                 {/* Property Type */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Property Type</label>
@@ -879,45 +889,47 @@ export default function HomePage() {
         {/* Properties List */}
         <div>
           {/* Header with Add Button and Tabs */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
-            <div className="flex items-center gap-4">
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                Your Properties
-                <span className="ml-2 text-base font-normal text-gray-500 dark:text-gray-400">
-                  ({properties.length} {properties.length === 1 ? "property" : "properties"})
+          <div className="flex flex-col gap-3 mb-4 sm:mb-6">
+            {/* Title Row */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+                Properties
+                <span className="ml-1 sm:ml-2 text-sm sm:text-base font-normal text-gray-500 dark:text-gray-400">
+                  ({properties.length})
                 </span>
               </h2>
               <button
                 onClick={handleAddProperty}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md"
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span className="hidden sm:inline">Add Property</span>
+                <span className="sm:hidden">Add</span>
               </button>
             </div>
 
             {/* View Tabs */}
-            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 self-start">
               <button
                 onClick={() => setActiveView("list")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all ${
                   activeView === "list"
                     ? "bg-white dark:bg-gray-600 text-cyan-600 dark:text-cyan-400 shadow-sm"
                     : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                <List className="w-4 h-4" />
+                <List className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 List
               </button>
               <button
                 onClick={() => setActiveView("map")}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all ${
                   activeView === "map"
                     ? "bg-white dark:bg-gray-600 text-cyan-600 dark:text-cyan-400 shadow-sm"
                     : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                <MapPin className="w-4 h-4" />
+                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Map
               </button>
             </div>

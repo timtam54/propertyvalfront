@@ -413,13 +413,13 @@ export default function HomePage() {
   const handleLogout = () => {
     if (isGoogleAuthenticated) {
       googleLogout();
-      router.push("/login");
+      router.push("/");
     } else if (instance) {
       instance.logoutRedirect({
-        postLogoutRedirectUri: window.location.origin + "/login"
+        postLogoutRedirectUri: window.location.origin + "/"
       });
     } else {
-      router.push("/login");
+      router.push("/");
     }
   };
 

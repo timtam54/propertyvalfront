@@ -550,13 +550,13 @@ export default function HomePage() {
       />
 
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors">
+      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Home className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-500" />
-              <span className="text-base sm:text-xl font-bold text-cyan-500">PropertyPitch</span>
+              <Home className="w-6 h-6 sm:w-7 sm:h-7 text-white dark:text-cyan-500" />
+              <span className="text-base sm:text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
             </div>
 
             {/* Desktop Navigation Buttons */}
@@ -578,7 +578,7 @@ export default function HomePage() {
               {isAdmin && (
                 <button
                   onClick={() => router.push('/admin')}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all whitespace-nowrap"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 dark:bg-gray-800 text-white dark:text-gray-300 text-sm font-semibold rounded-lg hover:bg-white/30 dark:hover:bg-gray-700 transition-all whitespace-nowrap"
                 >
                   <Settings className="w-4 h-4" />
                   Admin
@@ -592,16 +592,16 @@ export default function HomePage() {
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all"
+                  className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-white/20 dark:hover:bg-gray-700 transition-all"
                 >
                   {userPicture ? (
-                    <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover" />
+                    <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover ring-2 ring-white/50" />
                   ) : (
-                    <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                    <div className="w-8 h-8 bg-white/20 dark:bg-gradient-to-br dark:from-cyan-500 dark:to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold ring-2 ring-white/50">
                       {userInitials}
                     </div>
                   )}
-                  <span className="hidden lg:block text-sm font-medium text-gray-700 dark:text-gray-200 max-w-[120px] truncate">
+                  <span className="hidden lg:block text-sm font-medium text-white dark:text-gray-200 max-w-[120px] truncate">
                     {userName}
                   </span>
                 </button>
@@ -629,12 +629,12 @@ export default function HomePage() {
             <div className="flex md:hidden items-center gap-2">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-white/20 dark:hover:bg-gray-700 transition-all"
               >
                 {userPicture ? (
-                  <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover" />
+                  <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover ring-2 ring-white/50" />
                 ) : (
-                  <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                  <div className="w-8 h-8 bg-white/20 dark:bg-gradient-to-br dark:from-cyan-500 dark:to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold ring-2 ring-white/50">
                     {userInitials}
                   </div>
                 )}
@@ -642,12 +642,12 @@ export default function HomePage() {
 
               <button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                className="p-2 rounded-lg hover:bg-white/20 dark:hover:bg-gray-700 transition-all"
               >
                 {showMobileMenu ? (
-                  <X className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                  <X className="w-6 h-6 text-white dark:text-gray-300" />
                 ) : (
-                  <Menu className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                  <Menu className="w-6 h-6 text-white dark:text-gray-300" />
                 )}
               </button>
             </div>

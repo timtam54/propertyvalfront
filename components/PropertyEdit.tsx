@@ -582,21 +582,19 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-start justify-between p-3 sm:p-4 lg:p-6 border-b border-gray-200 gap-2">
+          <div className="flex items-start justify-between p-3 sm:p-4 lg:p-6 border-b border-cyan-700 gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-t-xl">
             <div className="min-w-0 flex-1">
-              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
+              <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
                 {isEditing ? "Edit Property" : "Add Property"}
               </h2>
-              <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 line-clamp-1">
-                {isEditing ? "Update property details" : "Add details for AI-powered pitch"}
-              </p>
+             
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {!isEditing && (
                 <button
                   type="button"
                   onClick={() => setShowTemplates(true)}
-                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-purple-100 text-purple-700 rounded-lg font-semibold hover:bg-purple-200 transition-all text-xs sm:text-sm"
+                  className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-white/20 text-white rounded-lg font-semibold hover:bg-white/30 transition-all text-xs sm:text-sm"
                 >
                   <LayoutTemplate className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span className="hidden sm:inline">Template</span>
@@ -604,9 +602,9 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
               )}
               <button
                 onClick={onClose}
-                className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors"
               >
-                <X className="w-5 h-5 sm:w-6 sm:h-6 text-gray-500" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </button>
             </div>
           </div>

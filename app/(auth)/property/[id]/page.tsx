@@ -12,8 +12,10 @@ import {
 import { API } from "@/lib/config";
 import ReportUploadModal from "@/components/ReportUploadModal";
 import HistoricSalesCard from "@/components/HistoricSalesCard";
+import PropertyEdit from "@/components/PropertyEdit";
 import { usePageView } from "@/hooks/useAudit";
 import DarkModeToggle from "@/components/DarkModeToggle";
+import { useMsalSafe, useGoogleAuth } from "@/components/AuthProvider";
 
 // Using a different Facebook icon to avoid deprecation warning
 const FacebookIcon = () => (
@@ -52,6 +54,12 @@ export default function PropertyDetailPage() {
   const params = useParams();
   const propertyId = params.id as string;
 
+  // Auth hooks for user email
+  const { accounts } = useMsalSafe();
+  const { googleUser } = useGoogleAuth();
+  const msalUser = accounts[0];
+  const userEmail = googleUser?.email || msalUser?.username || "";
+
   // Track page view for audit with property ID
   usePageView('property-detail', propertyId ? parseInt(propertyId, 10) || 0 : 0);
 
@@ -83,6 +91,9 @@ export default function PropertyDetailPage() {
 
   // Sold modal states
   const [showSoldModal, setShowSoldModal] = useState(false);
+
+  // Property edit modal
+  const [showPropertyEdit, setShowPropertyEdit] = useState(false);
 
   // Sold modal state
   const [soldPrice, setSoldPrice] = useState("");
@@ -412,11 +423,11 @@ export default function PropertyDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
       {/* Header */}
-      <header className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-700 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Home className="text-cyan-500" size={24} />
-            <span className="text-lg font-extrabold bg-gradient-to-r from-cyan-500 to-emerald-500 bg-clip-text text-transparent">
+            <Home className="text-white dark:text-cyan-500" size={24} />
+            <span className="text-lg font-extrabold text-white dark:text-cyan-500">
               PropertyPitch
             </span>
           </div>
@@ -425,7 +436,7 @@ export default function PropertyDetailPage() {
           <div className="hidden md:flex items-center gap-3">
             <button
               onClick={() => router.push('/properties')}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 dark:bg-gray-700 border border-white/30 dark:border-gray-600 rounded-lg text-white dark:text-gray-200 font-medium hover:bg-white/30 dark:hover:bg-gray-600 transition-colors"
             >
               <ArrowLeft size={16} />
               Back
@@ -438,7 +449,7 @@ export default function PropertyDetailPage() {
               Property Valuation
             </button>
             <button
-              onClick={() => router.push(`/property/${propertyId}/edit`)}
+              onClick={() => setShowPropertyEdit(true)}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-500 text-white rounded-lg font-semibold hover:bg-cyan-600 transition-colors"
             >
               <Edit size={16} />
@@ -467,9 +478,9 @@ export default function PropertyDetailPage() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            className="md:hidden p-2 hover:bg-white/20 dark:hover:bg-gray-700 rounded-lg"
           >
-            <Menu size={24} className="text-gray-700 dark:text-gray-300" />
+            <Menu size={24} className="text-white dark:text-gray-300" />
           </button>
         </div>
 
@@ -495,7 +506,7 @@ export default function PropertyDetailPage() {
               Property Valuation
             </button>
             <button
-              onClick={() => { router.push(`/property/${propertyId}/edit`); setShowMobileMenu(false); }}
+              onClick={() => { setShowPropertyEdit(true); setShowMobileMenu(false); }}
               className="w-full flex items-center gap-3 px-4 py-3 bg-cyan-500 text-white rounded-lg font-semibold"
             >
               <Edit size={18} />
@@ -1057,6 +1068,33 @@ export default function PropertyDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Property Edit Modal */}
+      <PropertyEdit
+        property={property ? {
+          id: property.id,
+          location: property.location,
+          beds: property.beds,
+          baths: property.baths,
+          carpark: property.carpark,
+          price: property.price ?? null,
+          property_type: property.property_type || '',
+          images: property.images || [],
+          features: property.features || '',
+          size: property.size ?? undefined,
+          strata_body_corps: property.strata_body_corps ?? undefined,
+          council_rates: property.council_rates ?? undefined,
+          rp_data_report: property.rp_data_report ?? undefined,
+          additional_report: property.additional_report ?? undefined,
+        } : null}
+        userEmail={userEmail}
+        isOpen={showPropertyEdit}
+        onClose={() => setShowPropertyEdit(false)}
+        onSave={() => {
+          setShowPropertyEdit(false);
+          fetchProperty();
+        }}
+      />
     </div>
   );
 }

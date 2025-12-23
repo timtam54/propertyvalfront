@@ -339,10 +339,10 @@ export default function QuickEvaluationPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)' }}>
       {/* Header */}
-      <header style={{ background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(148,163,184,0.1)', padding: '0.75rem 0', position: 'sticky', top: 0, zIndex: 50 }}>
+      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50" style={{ padding: '0.75rem 0' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Home className="text-cyan-500" size={28} />
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 800, background: 'linear-gradient(135deg, #0ea5e9 0%, #10b981 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>PropertyPitch</h1>
+          <Home className="text-white dark:text-cyan-500" size={28} />
+          <h1 className="text-white dark:text-cyan-500" style={{ fontSize: '1.25rem', fontWeight: 800 }}>PropertyPitch</h1>
         </div>
       </header>
 

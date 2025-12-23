@@ -801,11 +801,11 @@ export default function PropertyEvaluationPage() {
       )}
 
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 px-4 py-3 sticky top-0 z-50">
         <div className="max-w-[1200px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🏠</span>
-            <h1 className="text-lg font-bold text-cyan-500">PropertyPitch</h1>
+            <h1 className="text-lg font-bold text-white dark:text-cyan-500">PropertyPitch</h1>
           </div>
           <DarkModeToggle />
         </div>

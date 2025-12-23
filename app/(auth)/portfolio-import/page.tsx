@@ -175,7 +175,7 @@ export default function PortfolioImport() {
         {/* Header */}
         <div style={{ marginBottom: "1rem", display: "flex", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap" }}>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/properties")}
             style={{
               background: "rgba(255, 255, 255, 0.2)",
               border: "none",
@@ -587,7 +587,7 @@ export default function PortfolioImport() {
 
             <div style={{ display: "flex", gap: "1rem" }}>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/properties")}
                 style={{
                   padding: "0.75rem 1.5rem",
                   background: "#667eea",

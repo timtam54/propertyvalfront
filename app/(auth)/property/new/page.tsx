@@ -71,7 +71,7 @@ export default function AddPropertyPage() {
       };
       const response = await axios.post(`${API}/properties`, payload);
       toast.success("Property added successfully!");
-      router.push("/");
+      router.push("/properties");
     } catch (error: any) {
       console.error("Error adding property:", error);
       const message = error.response?.data?.detail || "Failed to add property. Make sure the backend is running.";
@@ -98,7 +98,7 @@ export default function AddPropertyPage() {
       </header>
 
       <main className="main-content">
-        <button onClick={() => router.push("/")} className="back-btn">
+        <button onClick={() => router.push("/properties")} className="back-btn">
           <ArrowLeft size={20} />
           Back to Properties
         </button>
@@ -262,7 +262,7 @@ export default function AddPropertyPage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/properties")}
                 className="cancel-btn"
               >
                 Cancel

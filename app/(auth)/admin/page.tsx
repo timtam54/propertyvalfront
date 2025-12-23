@@ -363,7 +363,7 @@ export default function AdminPage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               <Link
-                href="/"
+                href="/properties"
                 className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />

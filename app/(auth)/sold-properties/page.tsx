@@ -155,7 +155,7 @@ export default function SoldPropertiesPage() {
         gap: '10px',
         flexWrap: 'wrap'
       }}>
-        <Link href="/" style={{
+        <Link href="/properties" style={{
           color: 'white',
           textDecoration: 'none',
           fontSize: '20px',

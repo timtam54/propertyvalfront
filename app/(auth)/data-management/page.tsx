@@ -209,7 +209,7 @@ export default function DataManagement() {
         {/* Header */}
         <div style={{ marginBottom: "1rem", display: "flex", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap" }}>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/properties")}
             style={{
               background: "rgba(255, 255, 255, 0.2)",
               border: "none",

@@ -103,7 +103,7 @@ export default function PropertyDetailPage() {
       console.error("Error fetching property:", error);
       const message = error.response?.data?.detail || "Failed to load property";
       toast.error(message);
-      router.push("/");
+      router.push("/properties");
     } finally {
       setLoading(false);
     }
@@ -158,7 +158,7 @@ export default function PropertyDetailPage() {
     try {
       await axios.delete(`${API}/properties/${propertyId}`);
       toast.success("Property deleted successfully");
-      router.push("/");
+      router.push("/properties");
     } catch (error: any) {
       console.error("Error deleting property:", error);
       const message = error.response?.data?.detail || "Failed to delete property";
@@ -424,7 +424,7 @@ export default function PropertyDetailPage() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-3">
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/properties')}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
             >
               <ArrowLeft size={16} />
@@ -481,7 +481,7 @@ export default function PropertyDetailPage() {
               <DarkModeToggle />
             </div>
             <button
-              onClick={() => { router.push('/'); setShowMobileMenu(false); }}
+              onClick={() => { router.push('/properties'); setShowMobileMenu(false); }}
               className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-200 font-medium"
             >
               <ArrowLeft size={18} />

@@ -36,7 +36,7 @@ export default function Login() {
 
   useEffect(() => {
     if (isMsalAuthenticated || isGoogleAuthenticated) {
-      router.push("/");
+      router.push("/properties");
     }
   }, [isMsalAuthenticated, isGoogleAuthenticated, router]);
 
@@ -87,7 +87,7 @@ export default function Login() {
           });
 
           toast.success(`Welcome, ${decoded.name}!`);
-          router.push("/");
+          router.push("/properties");
         } else {
           toast.error("Failed to decode Google credentials");
         }

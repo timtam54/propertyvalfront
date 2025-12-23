@@ -68,7 +68,7 @@ export default function EditPropertyPage() {
       console.error("Error fetching property:", error);
       const message = error.response?.data?.detail || "Failed to load property";
       toast.error(message);
-      router.push("/");
+      router.push("/properties");
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function EditPropertyPage() {
 
       await axios.put(`${API}/properties/${propertyId}`, payload);
       toast.success("Property updated successfully!");
-      router.push("/");
+      router.push("/properties");
     } catch (error: any) {
       console.error("Error updating property:", error);
       const message = error.response?.data?.detail || "Failed to update property";
@@ -135,7 +135,7 @@ export default function EditPropertyPage() {
       </header>
 
       <main className="main-content">
-        <button onClick={() => router.push("/")} className="back-btn">
+        <button onClick={() => router.push("/properties")} className="back-btn">
           <ArrowLeft size={20} />
           Back to Properties
         </button>
@@ -297,7 +297,7 @@ export default function EditPropertyPage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/")}
+                onClick={() => router.push("/properties")}
                 className="cancel-btn"
               >
                 Cancel

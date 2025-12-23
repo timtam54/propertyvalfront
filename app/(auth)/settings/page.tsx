@@ -109,7 +109,7 @@ export default function SettingsPage() {
         padding: '0.75rem 1rem'
       }}>
         <Link
-          href="/"
+          href="/properties"
           style={{
             display: 'inline-flex',
             alignItems: 'center',

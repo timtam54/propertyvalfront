@@ -348,7 +348,7 @@ export default function QuickEvaluationPage() {
 
       <main style={{ maxWidth: '1000px', margin: '0 auto', padding: '1rem' }}>
         <button
-          onClick={() => router.push('/')}
+          onClick={() => router.push("/properties")}
           style={{
             display: 'flex',
             alignItems: 'center',

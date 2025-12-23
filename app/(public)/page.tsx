@@ -1,1156 +1,579 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
-import Script from "next/script";
-import { toast } from "sonner";
-import { Home, Bed, Bath, Car, Building, Edit, Trash2, Search, Upload, CheckCircle, Settings, User, X, LogOut, Menu, MapPin, List, Filter, Star, Download, Plus, TrendingUp, Clock, DollarSign } from "lucide-react";
-import { API } from "@/lib/config";
-import { PropertyQuickActions } from "@/components/PropertyActions";
-import BatchExport from "@/components/BatchExport";
-import PropertyEdit from "@/components/PropertyEdit";
-import PropertyImageCarousel from "@/components/PropertyImageCarousel";
-import DarkModeToggle from "@/components/DarkModeToggle";
-import { useMsalSafe, useIsAuthenticatedSafe, useGoogleAuth } from "@/components/AuthProvider";
-import { usePageView } from "@/hooks/useAudit";
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { Home, TrendingUp, FileText, Check, X, ArrowRight, BarChart3, Shield, Zap, Star, Quote, MapPin, Building, Users, Clock } from 'lucide-react';
 
-declare global {
-  interface Window {
-    google: typeof google;
-    initGooglePlaces: () => void;
+// Animated Counter Component
+function AnimatedCounter({ end, duration = 2000, suffix = '' }: { end: number; duration?: number; suffix?: string }) {
+  const [count, setCount] = useState(0);
+  const [hasAnimated, setHasAnimated] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !hasAnimated) {
+          setHasAnimated(true);
+          let startTime: number;
+          const animate = (currentTime: number) => {
+            if (!startTime) startTime = currentTime;
+            const progress = Math.min((currentTime - startTime) / duration, 1);
+            // Easing function for smooth animation
+            const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+            setCount(Math.floor(easeOutQuart * end));
+            if (progress < 1) {
+              requestAnimationFrame(animate);
+            }
+          };
+          requestAnimationFrame(animate);
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [end, duration, hasAnimated]);
+
+  return (
+    <div ref={ref} className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white">
+      {count.toLocaleString()}{suffix}
+    </div>
+  );
+}
+
+// Testimonial data
+const testimonials = [
+  {
+    name: "Sarah Mitchell",
+    role: "Senior Real Estate Agent",
+    company: "Ray White Brisbane",
+    image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face",
+    quote: "PropertyPitch has completely transformed how I prepare valuations. What used to take hours now takes minutes, and my clients are impressed with the professional reports.",
+    rating: 5
+  },
+  {
+    name: "James Chen",
+    role: "Property Investor",
+    company: "Chen Property Group",
+    image: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face",
+    quote: "The AI photo analysis is incredible. It picks up on renovation details I might miss and factors them into the valuation. Essential tool for any serious investor.",
+    rating: 5
+  },
+  {
+    name: "Emma Thompson",
+    role: "Principal Agent",
+    company: "LJ Hooker Sydney",
+    image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face",
+    quote: "The comparable sales data is always up-to-date and the RP Data integration saves me from switching between multiple platforms. Highly recommend!",
+    rating: 5
   }
-}
+];
 
-interface PropertyNote {
-  id: string;
-  text: string;
-  created_at: string;
-  created_by: string;
-  type?: 'general' | 'call' | 'meeting' | 'offer' | 'follow_up';
-}
+// Feature comparison data
+const featureComparison = [
+  { feature: "AI Photo Analysis", basic: true, pro: true },
+  { feature: "Comparable Sales Data", basic: true, pro: true },
+  { feature: "PDF Valuation Reports", basic: true, pro: true },
+  { feature: "Monthly Valuations", basic: "20", pro: "Unlimited" },
+  { feature: "RP Data Integration", basic: false, pro: true },
+  { feature: "CoreLogic Integration", basic: false, pro: true },
+  { feature: "White-label Reports", basic: false, pro: true },
+  { feature: "Custom Branding", basic: false, pro: true },
+  { feature: "API Access", basic: false, pro: true },
+  { feature: "Priority Support", basic: false, pro: true },
+  { feature: "Team Collaboration", basic: false, pro: true },
+];
 
-interface Property {
-  id: string;
-  location: string;
-  beds: number;
-  baths: number;
-  carpark: number;
-  price: number | null;
-  pricing_type?: string;
-  price_upper?: number;
-  property_type: string;
-  images: string[];
-  features?: string;
-  size?: number;
-  strata_body_corps?: number;
-  council_rates?: number;
-  agent1_name?: string;
-  agent1_phone?: string;
-  agent2_name?: string;
-  agent2_phone?: string;
-  agent_email?: string;
-  status?: string;
-  rp_data_report?: string;
-  additional_report?: string;
-  user_email?: string;
-  evaluation_report?: string | null;
-  evaluation_date?: string;
-  is_favourite?: boolean;
-  notes?: PropertyNote[];
-  neighbouring_suburb?: string;
-  neighbouring_postcode?: string;
-  neighbouring_state?: string;
-  created_at?: string;
-  comparables_data?: {
-    statistics?: {
-      price_range?: {
-        min?: number;
-        max?: number;
-        avg?: number;
-      };
-    };
-  };
-}
-
-// Helper function to calculate days since a date
-function getDaysSince(dateString?: string): number | null {
-  if (!dateString) return null;
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffTime = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
+// Property showcase images
+const showcaseProperties = [
+  {
+    image: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&h=400&fit=crop",
+    price: "$1,250,000",
+    location: "Paddington, QLD",
+    beds: 4,
+    baths: 2
+  },
+  {
+    image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&h=400&fit=crop",
+    price: "$890,000",
+    location: "Newstead, QLD",
+    beds: 3,
+    baths: 2
+  },
+  {
+    image: "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=600&h=400&fit=crop",
+    price: "$2,100,000",
+    location: "Teneriffe, QLD",
+    beds: 5,
+    baths: 3
+  }
+];
 
 export default function HomePage() {
   const router = useRouter();
-  const { instance, accounts } = useMsalSafe();
-  const isMsalAuthenticated = useIsAuthenticatedSafe();
-  const { googleUser, isGoogleAuthenticated, googleLogout } = useGoogleAuth();
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [allProperties, setAllProperties] = useState<Property[]>([]);
+  const [currentShowcase, setCurrentShowcase] = useState(0);
 
-  // Check if user is authenticated via either provider
-  const isAuthenticated = isMsalAuthenticated || isGoogleAuthenticated;
-
-  // Track page view for audit
-  usePageView('home');
-
-  // Get current user info (from Microsoft or Google)
-  const msalUser = accounts[0];
-  const userName = googleUser?.name || msalUser?.name || msalUser?.username || "User";
-  const userEmail = googleUser?.email || msalUser?.username || "";
-  const userPicture = googleUser?.picture;
-  const userInitials = userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-
-  // Redirect to login if not authenticated
+  // Auto-rotate showcase
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/login");
-    }
-  }, [isAuthenticated, router]);
-
-  // Don't render page content until authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Handle logout
-  const handleLogout = () => {
-    if (isGoogleAuthenticated) {
-      googleLogout();
-      router.push("/login");
-    } else if (instance) {
-      instance.logoutRedirect({
-        postLogoutRedirectUri: window.location.origin + "/login"
-      });
-    } else {
-      router.push("/login");
-    }
-  };
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // Fetch user admin status
-  useEffect(() => {
-    const fetchUserAdmin = async () => {
-      if (!isAuthenticated || !userEmail) {
-        setIsAdmin(false);
-        return;
-      }
-      try {
-        const response = await fetch(`${API}/auth/users`);
-        if (response.ok) {
-          const data = await response.json();
-          const currentUser = data.users?.find((u: any) => u.email?.toLowerCase() === userEmail.toLowerCase());
-          // Handle both boolean true and bit field value 1
-          setIsAdmin(currentUser?.admin === true || currentUser?.admin === 1);
-        } else {
-          setIsAdmin(false);
-        }
-      } catch (err) {
-        console.error('Failed to fetch user admin status:', err);
-        setIsAdmin(false);
-      }
-    };
-    fetchUserAdmin();
-  }, [isAuthenticated, userEmail]);
-  // View and filter states
-  const [activeView, setActiveView] = useState<"list" | "map">("list");
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    propertyType: "",
-    minPrice: "",
-    maxPrice: "",
-    minBeds: "",
-    maxBeds: "",
-    minBaths: "",
-  });
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const markersRef = useRef<google.maps.Marker[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [googleLoaded, setGoogleLoaded] = useState(false);
-
-  // Property Edit Modal state
-  const [showPropertyEdit, setShowPropertyEdit] = useState(false);
-  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
-
-  // Poll for Google Maps to be loaded
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    let timeout: NodeJS.Timeout | null = null;
-
-    const checkGoogleMaps = () => {
-      if (typeof window !== 'undefined' && window.google?.maps?.places) {
-        setGoogleLoaded(true);
-        if (interval) clearInterval(interval);
-        if (timeout) clearTimeout(timeout);
-        return true;
-      }
-      return false;
-    };
-
-    if (checkGoogleMaps()) return;
-
-    interval = setInterval(() => {
-      checkGoogleMaps();
-    }, 100);
-
-    timeout = setTimeout(() => {
-      if (interval) clearInterval(interval);
-    }, 10000);
-
-    return () => {
-      if (interval) clearInterval(interval);
-      if (timeout) clearTimeout(timeout);
-    };
+    const interval = setInterval(() => {
+      setCurrentShowcase((prev) => (prev + 1) % showcaseProperties.length);
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const ITEMS_PER_PAGE = 12;
-  const [showFavouritesOnly, setShowFavouritesOnly] = useState(false);
-  const [showBatchExport, setShowBatchExport] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const paginatedProperties = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return properties.slice(startIndex, endIndex);
-  }, [properties, currentPage]);
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        // Allow Escape to blur inputs
-        if (e.key === 'Escape') {
-          target.blur();
-        }
-        return;
-      }
-
-      // Don't trigger if modal is open
-      if (showPropertyEdit || showBatchExport) {
-        if (e.key === 'Escape') {
-          setShowPropertyEdit(false);
-          setShowBatchExport(false);
-        }
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case 'n':
-          // New property
-          e.preventDefault();
-          setEditingProperty(null);
-          setShowPropertyEdit(true);
-          break;
-        case '/':
-          // Focus search
-          e.preventDefault();
-          searchInputRef.current?.focus();
-          break;
-        case 'escape':
-          // Clear search
-          if (searchQuery) {
-            setSearchQuery('');
-            applyFilters('', filters, showFavouritesOnly);
-          }
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showPropertyEdit, showBatchExport, searchQuery, filters, showFavouritesOnly]);
-
-  useEffect(() => {
-    if (userEmail) {
-      fetchProperties();
-    }
-  }, [userEmail]);
-
-  const fetchProperties = async () => {
-    setLoading(true);
-    try {
-      const headers: Record<string, string> = {};
-      if (userEmail) {
-        headers['x-user-email'] = userEmail;
-      }
-      const response = await fetch(`${API}/properties`, { headers });
-      if (!response.ok) {
-        console.error(`HTTP error fetching properties: ${response.status}`);
-        return;
-      }
-      const data = await response.json();
-      const activeProperties = data.filter((prop: Property) => prop.status !== "sold");
-      setAllProperties(activeProperties);
-      setProperties(activeProperties);
-    } catch (error) {
-      console.error('Error fetching properties:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Apply all filters including search
-  const applyFilters = useCallback((searchText: string, currentFilters: typeof filters, favouritesOnly: boolean = false) => {
-    let filtered = [...allProperties];
-
-    // Favourites filter
-    if (favouritesOnly) {
-      filtered = filtered.filter(prop => prop.is_favourite);
-    }
-
-    // Text search
-    if (searchText.trim()) {
-      filtered = filtered.filter(prop =>
-        prop.location?.toLowerCase().includes(searchText.toLowerCase()) ||
-        prop.property_type?.toLowerCase().includes(searchText.toLowerCase()) ||
-        prop.features?.toLowerCase().includes(searchText.toLowerCase())
-      );
-    }
-
-    // Property type filter
-    if (currentFilters.propertyType) {
-      filtered = filtered.filter(prop => prop.property_type === currentFilters.propertyType);
-    }
-
-    // Price filters
-    if (currentFilters.minPrice) {
-      const minPrice = parseFloat(currentFilters.minPrice);
-      filtered = filtered.filter(prop => prop.price && prop.price >= minPrice);
-    }
-    if (currentFilters.maxPrice) {
-      const maxPrice = parseFloat(currentFilters.maxPrice);
-      filtered = filtered.filter(prop => prop.price && prop.price <= maxPrice);
-    }
-
-    // Beds filters
-    if (currentFilters.minBeds) {
-      const minBeds = parseInt(currentFilters.minBeds);
-      filtered = filtered.filter(prop => prop.beds >= minBeds);
-    }
-    if (currentFilters.maxBeds) {
-      const maxBeds = parseInt(currentFilters.maxBeds);
-      filtered = filtered.filter(prop => prop.beds <= maxBeds);
-    }
-
-    // Baths filter
-    if (currentFilters.minBaths) {
-      const minBaths = parseInt(currentFilters.minBaths);
-      filtered = filtered.filter(prop => prop.baths >= minBaths);
-    }
-
-    // Sort favourites first
-    filtered.sort((a, b) => {
-      if (a.is_favourite && !b.is_favourite) return -1;
-      if (!a.is_favourite && b.is_favourite) return 1;
-      return 0;
-    });
-
-    setProperties(filtered);
-    setCurrentPage(1);
-  }, [allProperties]);
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    applyFilters(query, filters, showFavouritesOnly);
-  };
-
-  const handleFavouritesToggle = () => {
-    const newValue = !showFavouritesOnly;
-    setShowFavouritesOnly(newValue);
-    applyFilters(searchQuery, filters, newValue);
-  };
-
-  const handleFavouriteChange = (propertyId: string, isFavourite: boolean) => {
-    setAllProperties(prev => prev.map(p =>
-      p.id === propertyId ? { ...p, is_favourite: isFavourite } : p
-    ));
-    setProperties(prev => prev.map(p =>
-      p.id === propertyId ? { ...p, is_favourite: isFavourite } : p
-    ));
-  };
-
-  const handleFilterChange = (key: keyof typeof filters, value: string) => {
-    const newFilters = { ...filters, [key]: value };
-    setFilters(newFilters);
-    applyFilters(searchQuery, newFilters);
-  };
-
-  const clearFilters = () => {
-    const clearedFilters = {
-      propertyType: "",
-      minPrice: "",
-      maxPrice: "",
-      minBeds: "",
-      maxBeds: "",
-      minBaths: "",
-    };
-    setFilters(clearedFilters);
-    setSearchQuery("");
-    applyFilters("", clearedFilters);
-  };
-
-  const activeFilterCount = Object.values(filters).filter(v => v !== "").length;
-
-  // Initialize Google Map when view switches to map
-  useEffect(() => {
-    if (activeView === "map" && googleLoaded) {
-      const timer = setTimeout(() => {
-        if (mapContainerRef.current && !mapRef.current) {
-          const defaultCenter = { lat: -33.8688, lng: 151.2093 };
-
-          mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
-            center: defaultCenter,
-            zoom: 10,
-            styles: [
-              { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-            ]
-          });
-        }
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [activeView, googleLoaded]);
-
-  // Update markers when properties change or view switches to map
-  useEffect(() => {
-    if (activeView === "map" && googleLoaded && properties.length > 0) {
-      const timer = setTimeout(() => {
-        if (!mapRef.current) return;
-
-        markersRef.current.forEach(marker => marker.setMap(null));
-        markersRef.current = [];
-
-        const geocoder = new window.google.maps.Geocoder();
-        const bounds = new window.google.maps.LatLngBounds();
-        let geocodedCount = 0;
-
-        properties.forEach((property) => {
-          if (property.location) {
-            geocoder.geocode({ address: property.location }, (results, status) => {
-              geocodedCount++;
-
-              if (status === "OK" && results && results[0]) {
-                const position = results[0].geometry.location;
-                bounds.extend(position);
-
-                const marker = new window.google.maps.Marker({
-                  position,
-                  map: mapRef.current,
-                  title: property.location,
-                  icon: {
-                    path: window.google.maps.SymbolPath.CIRCLE,
-                    scale: 10,
-                    fillColor: "#06b6d4",
-                    fillOpacity: 1,
-                    strokeColor: "#ffffff",
-                    strokeWeight: 2,
-                  }
-                });
-
-                const infoWindow = new window.google.maps.InfoWindow({
-                  content: `
-                    <div style="padding: 8px; max-width: 250px;">
-                      <h3 style="font-weight: bold; margin-bottom: 4px; font-size: 14px;">${property.location}</h3>
-                      <p style="color: #666; margin-bottom: 4px; font-size: 12px;">
-                        ${property.beds} bed • ${property.baths} bath • ${property.carpark} car
-                      </p>
-                      ${property.price ? `<p style="color: #06b6d4; font-weight: bold; font-size: 14px;">$${property.price.toLocaleString()}</p>` : ''}
-                      <a href="/property/${property.id}" style="color: #06b6d4; font-size: 12px; text-decoration: underline;">View Details →</a>
-                    </div>
-                  `
-                });
-
-                marker.addListener("click", () => {
-                  infoWindow.open(mapRef.current, marker);
-                });
-
-                markersRef.current.push(marker);
-
-                if (geocodedCount === properties.length && markersRef.current.length > 0) {
-                  mapRef.current?.fitBounds(bounds);
-                  const listener = window.google.maps.event.addListener(mapRef.current!, "idle", () => {
-                    if (mapRef.current!.getZoom()! > 15) {
-                      mapRef.current!.setZoom(15);
-                    }
-                    window.google.maps.event.removeListener(listener);
-                  });
-                }
-              }
-            });
-          }
-        });
-      }, 200);
-
-      return () => clearTimeout(timer);
-    }
-  }, [activeView, properties, googleLoaded]);
-
-  const handleAddProperty = () => {
-    setEditingProperty(null);
-    setShowPropertyEdit(true);
-  };
-
-  const handleEditProperty = (property: Property, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingProperty(property);
-    setShowPropertyEdit(true);
-  };
-
-  const handlePropertySaved = () => {
-    fetchProperties();
-  };
-
-  const handleDelete = async (propertyId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm("Are you sure you want to delete this property?")) {
-      return;
-    }
-    try {
-      const response = await fetch(`${API}/properties/${propertyId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      toast.success("Property deleted successfully!");
-      fetchProperties();
-    } catch (error) {
-      console.error("Error deleting property:", error);
-      toast.error("Failed to delete property");
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      {/* Google Maps Script */}
-      <Script
-        src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
-        strategy="afterInteractive"
-        onLoad={() => {
-          setGoogleLoaded(true);
-        }}
-        onError={(e) => {
-          console.error("Failed to load Google Maps API:", e);
-        }}
-      />
-
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <Home className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-500" />
-              <span className="text-base sm:text-xl font-bold text-cyan-500">PropertyPitch</span>
-            </div>
-
-            {/* Desktop Navigation Buttons */}
-            <div className="hidden md:flex items-center gap-2">
-              <button
-                onClick={() => router.push('/portfolio-import')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white text-sm font-semibold rounded-lg hover:from-orange-500 hover:to-orange-600 transition-all shadow-sm whitespace-nowrap"
-              >
-                <Upload className="w-4 h-4" />
-                Import
-              </button>
-              <button
-                onClick={() => router.push('/sold-properties')}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-sm whitespace-nowrap"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Sold
-              </button>
-              {isAdmin && (
-                <button
-                  onClick={() => router.push('/admin')}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-semibold rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all whitespace-nowrap"
-                >
-                  <Settings className="w-4 h-4" />
-                  Admin
-                </button>
-              )}
-
-              {/* Dark Mode Toggle */}
-              <DarkModeToggle />
-
-              {/* User Avatar & Menu - Desktop */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 transition-all"
-                >
-                  {userPicture ? (
-                    <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                      {userInitials}
-                    </div>
-                  )}
-                  <span className="hidden lg:block text-sm font-medium text-gray-700 dark:text-gray-200 max-w-[120px] truncate">
-                    {userName}
-                  </span>
-                </button>
-
-                {/* Dropdown Menu */}
-                {showUserMenu && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
-                    <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{userName}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
-                    </div>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Mobile: User Avatar + Hamburger Menu */}
-            <div className="flex md:hidden items-center gap-2">
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-              >
-                {userPicture ? (
-                  <img src={userPicture} alt={userName} className="w-8 h-8 rounded-full object-cover" />
-                ) : (
-                  <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                    {userInitials}
-                  </div>
-                )}
-              </button>
-
-              <button
-                onClick={() => setShowMobileMenu(!showMobileMenu)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-              >
-                {showMobileMenu ? (
-                  <X className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-                ) : (
-                  <Menu className="w-6 h-6 text-gray-700 dark:text-gray-300" />
-                )}
-              </button>
-            </div>
+      <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Home className="w-8 h-8 text-cyan-500" />
+            <span className="text-xl font-bold text-gray-900 dark:text-white">PropertyPitch</span>
           </div>
-
-          {/* Mobile Menu Dropdown */}
-          {showMobileMenu && (
-            <div className="md:hidden border-t border-gray-200 dark:border-gray-700 py-3 space-y-2">
-              <div className="flex items-center justify-between px-4 py-2 mb-2">
-                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Theme</span>
-                <DarkModeToggle />
-              </div>
-              <button
-                onClick={() => { router.push('/portfolio-import'); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold rounded-lg"
-              >
-                <Upload className="w-5 h-5" />
-                Import Portfolio
-              </button>
-              <button
-                onClick={() => { router.push('/sold-properties'); setShowMobileMenu(false); }}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold rounded-lg"
-              >
-                <CheckCircle className="w-5 h-5" />
-                Sold Properties
-              </button>
-              {isAdmin && (
-                <button
-                  onClick={() => { router.push('/admin'); setShowMobileMenu(false); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-semibold rounded-lg"
-                >
-                  <Settings className="w-5 h-5" />
-                  Admin
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/login')}
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 font-medium hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => router.push('/login')}
+              className="px-5 py-2 bg-cyan-500 text-white font-semibold rounded-lg hover:bg-cyan-600 transition-colors"
+            >
+              Get Started
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* User Menu Dropdown - Mobile */}
-      {showUserMenu && (
-        <div className="md:hidden fixed left-4 right-4 top-[72px] bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-50">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">{userName}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{userEmail}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </button>
-        </div>
-      )}
-
-      {/* Click outside to close menus */}
-      {(showUserMenu || showMobileMenu) && (
-        <div
-          className="fixed inset-0 z-30"
-          onClick={() => {
-            setShowUserMenu(false);
-            setShowMobileMenu(false);
-          }}
-        />
-      )}
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {/* Search Bar and Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6 sm:mb-8 p-3 sm:p-4 transition-colors">
-          {/* Search Input and Quick Actions */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            {/* Search Input - Full width on mobile */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Search properties..."
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm sm:text-base text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all"
-              />
+      {/* Hero Section with Property Showcase */}
+      <section className="max-w-6xl mx-auto px-4 py-12 sm:py-20">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* Left: Text Content */}
+          <div className="text-center lg:text-left">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded-full text-sm font-medium mb-6">
+              <Zap className="w-4 h-4" />
+              AI-Powered Property Valuations
             </div>
-
-            {/* Action Buttons - Side by side on mobile */}
-            <div className="flex gap-2">
-              {/* Batch Export */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6 leading-tight">
+              Professional Property<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-emerald-500">
+                Valuations Made Simple
+              </span>
+            </h1>
+            <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 mb-8">
+              Get accurate property valuations using AI analysis, comparable sales data, and market insights.
+              Perfect for agents, investors, and property professionals.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4">
               <button
-                onClick={() => setShowBatchExport(true)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all text-sm sm:text-base"
-                title="Export multiple PDFs"
+                onClick={() => router.push('/login')}
+                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-cyan-500 to-emerald-500 text-white font-bold text-lg rounded-xl hover:opacity-90 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] flex items-center justify-center gap-2"
               >
-                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="sm:hidden">Export</span>
-                <span className="hidden sm:inline">Export</span>
+                Start Free Trial
+                <ArrowRight className="w-5 h-5" />
               </button>
-
-              {/* Filters Button */}
               <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg font-semibold transition-all text-sm sm:text-base ${
-                  showFilters || activeFilterCount > 0
-                    ? "bg-cyan-500 text-white"
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
-                }`}
+                onClick={() => router.push('/quick-evaluation')}
+                className="w-full sm:w-auto px-8 py-4 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold text-lg rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-cyan-500 dark:hover:border-cyan-500 transition-all hover:shadow-md"
               >
-                <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="sm:hidden">Filter</span>
-                <span className="hidden sm:inline">Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="bg-white text-cyan-600 text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-full">
-                    {activeFilterCount}
-                  </span>
-                )}
+                Try Quick Valuation
               </button>
             </div>
           </div>
 
-          {/* Expandable Filters */}
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
-                {/* Property Type */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Property Type</label>
-                  <select
-                    value={filters.propertyType}
-                    onChange={(e) => handleFilterChange("propertyType", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="">All Types</option>
-                    <option value="House">House</option>
-                    <option value="Apartment">Apartment</option>
-                    <option value="Unit">Unit</option>
-                    <option value="Townhouse">Townhouse</option>
-                    <option value="Villa">Villa</option>
-                    <option value="Land">Land</option>
-                    <option value="Acreage">Acreage</option>
-                    <option value="Rural Property">Rural Property</option>
-                    <option value="Block of Units">Block of Units</option>
-                  </select>
-                </div>
-
-                {/* Min Price */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Min Price</label>
-                  <input
-                    type="number"
-                    placeholder="$0"
-                    value={filters.minPrice}
-                    onChange={(e) => handleFilterChange("minPrice", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
-
-                {/* Max Price */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Max Price</label>
-                  <input
-                    type="number"
-                    placeholder="No max"
-                    value={filters.maxPrice}
-                    onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  />
-                </div>
-
-                {/* Min Beds */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Min Beds</label>
-                  <select
-                    value={filters.minBeds}
-                    onChange={(e) => handleFilterChange("minBeds", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="">Any</option>
-                    <option value="1">1+</option>
-                    <option value="2">2+</option>
-                    <option value="3">3+</option>
-                    <option value="4">4+</option>
-                    <option value="5">5+</option>
-                  </select>
-                </div>
-
-                {/* Max Beds */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Max Beds</label>
-                  <select
-                    value={filters.maxBeds}
-                    onChange={(e) => handleFilterChange("maxBeds", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="">Any</option>
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5+</option>
-                  </select>
-                </div>
-
-                {/* Min Baths */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Min Baths</label>
-                  <select
-                    value={filters.minBaths}
-                    onChange={(e) => handleFilterChange("minBaths", e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="">Any</option>
-                    <option value="1">1+</option>
-                    <option value="2">2+</option>
-                    <option value="3">3+</option>
-                    <option value="4">4+</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Clear Filters Button */}
-              {activeFilterCount > 0 && (
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={clearFilters}
-                    className="text-sm text-red-500 hover:text-red-600 font-semibold"
-                  >
-                    Clear all filters
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Properties List */}
-        <div>
-          {/* Header with Add Button and Tabs */}
-          <div className="flex flex-col gap-3 mb-4 sm:mb-6">
-            {/* Title Row */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
-                Properties
-                <span className="ml-1 sm:ml-2 text-sm sm:text-base font-normal text-gray-500 dark:text-gray-400">
-                  ({properties.length})
-                </span>
-              </h2>
-              <button
-                onClick={handleAddProperty}
-                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white text-sm sm:text-base font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md"
-              >
-                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">Add Property</span>
-                <span className="sm:hidden">Add</span>
-              </button>
-            </div>
-
-            {/* View Tabs */}
-            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 self-start">
-              <button
-                onClick={() => setActiveView("list")}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all ${
-                  activeView === "list"
-                    ? "bg-white dark:bg-gray-600 text-cyan-600 dark:text-cyan-400 shadow-sm"
-                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                <List className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                List
-              </button>
-              <button
-                onClick={() => setActiveView("map")}
-                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-semibold transition-all ${
-                  activeView === "map"
-                    ? "bg-white dark:bg-gray-600 text-cyan-600 dark:text-cyan-400 shadow-sm"
-                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                }`}
-              >
-                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                Map
-              </button>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 sm:p-16 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">Loading properties...</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base">Please wait while we fetch your properties</p>
-            </div>
-          ) : properties.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 sm:p-16 text-center">
-              <div className="text-4xl sm:text-6xl mb-4">🏠</div>
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">No properties yet</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base mb-6">Click the Add Property button to get started</p>
-              <button
-                onClick={handleAddProperty}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white font-semibold rounded-lg hover:from-cyan-600 hover:to-cyan-700 transition-all shadow-md"
-              >
-                <Plus className="w-5 h-5" />
-                Add Your First Property
-              </button>
-            </div>
-          ) : activeView === "map" ? (
-            /* Map View */
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden relative">
-              {!googleLoaded ? (
-                <div className="w-full h-[500px] sm:h-[600px] flex items-center justify-center bg-gray-100 dark:bg-gray-700">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500 mx-auto mb-3"></div>
-                    <p className="text-gray-500 dark:text-gray-400">Loading Google Maps...</p>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  ref={mapContainerRef}
-                  className="w-full h-[500px] sm:h-[600px]"
-                />
-              )}
-            </div>
-          ) : (
-            /* List View */
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-                {paginatedProperties.map((property) => (
+          {/* Right: Property Showcase */}
+          <div className="relative">
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl">
+              {/* Main Property Image */}
+              <div className="relative aspect-[4/3] overflow-hidden">
+                {showcaseProperties.map((property, index) => (
                   <div
-                    key={property.id}
-                    className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
-                    onClick={() => router.push(`/property/${property.id}`)}
+                    key={index}
+                    className={`absolute inset-0 transition-opacity duration-700 ${
+                      index === currentShowcase ? 'opacity-100' : 'opacity-0'
+                    }`}
                   >
-                    {/* Image Carousel with Quick Preview */}
-                    <div className="relative">
-                      <PropertyImageCarousel
-                        images={property.images || []}
-                        alt={property.location}
-                      />
+                    <img
+                      src={property.image}
+                      alt={property.location}
+                      className="w-full h-full object-cover"
+                    />
+                    {/* Gradient Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-                      {/* Quick Actions Overlay */}
-                      <div className="absolute top-2 right-2 z-10">
-                        <PropertyQuickActions
-                          propertyId={property.id}
-                          isFavourite={property.is_favourite}
-                          notesCount={property.notes?.length || 0}
-                          onFavouriteChange={(isFav) => handleFavouriteChange(property.id, isFav)}
-                        />
-                      </div>
-
-                      {/* Quick Stats Preview - Shows on Hover */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
-                          <div className="flex flex-wrap gap-2 text-white text-xs sm:text-sm">
-                            {/* Days Listed */}
-                            {property.created_at && (
-                              <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full">
-                                <Clock className="w-3 h-3" />
-                                <span>{getDaysSince(property.created_at)} days</span>
-                              </div>
-                            )}
-
-                            {/* Valuation from comparables */}
-                            {property.comparables_data?.statistics?.price_range?.avg && (
-                              <div className="flex items-center gap-1 bg-emerald-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
-                                <TrendingUp className="w-3 h-3" />
-                                <span>${(property.comparables_data.statistics.price_range.avg / 1000).toFixed(0)}k avg</span>
-                              </div>
-                            )}
-
-                            {/* Evaluation Status */}
-                            {property.evaluation_report ? (
-                              <div className="flex items-center gap-1 bg-emerald-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
-                                <CheckCircle className="w-3 h-3" />
-                                <span>Evaluated</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1 bg-amber-500/80 backdrop-blur-sm px-2 py-1 rounded-full">
-                                <Clock className="w-3 h-3" />
-                                <span>Pending</span>
-                              </div>
-                            )}
-
-                            {/* Property Type */}
-                            {property.property_type && (
-                              <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full">
-                                <Building className="w-3 h-3" />
-                                <span>{property.property_type}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-4 sm:p-6">
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-1 sm:mb-2 line-clamp-2">
+                    {/* Property Info */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                      <div className="flex items-center gap-2 text-cyan-300 text-sm mb-2">
+                        <MapPin className="w-4 h-4" />
                         {property.location}
-                      </h3>
-
-                      {property.user_email && (
-                        <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-2 sm:mb-3">
-                          <User className="w-3 h-3" />
-                          <span className="truncate">{property.user_email}</span>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-3 sm:gap-4 text-gray-600 dark:text-gray-300 mb-3 sm:mb-4">
-                        <div className="flex items-center gap-1">
-                          <Bed className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                          <span className="text-xs sm:text-sm">{property.beds}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Bath className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                          <span className="text-xs sm:text-sm">{property.baths}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Car className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                          <span className="text-xs sm:text-sm">{property.carpark}</span>
-                        </div>
                       </div>
-
-                      {property.price && (
-                        <div className="text-lg sm:text-xl font-bold text-cyan-600 mb-3 sm:mb-4">
-                          ${property.price.toLocaleString()}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2 sm:gap-3">
-                        <button
-                          onClick={(e) => handleEditProperty(property, e)}
-                          className="flex-1 flex items-center justify-center gap-1 sm:gap-2 py-2 sm:py-3 px-3 sm:px-4 bg-cyan-500 hover:bg-cyan-600 text-white text-sm font-semibold rounded-lg transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(property.id, e)}
-                          className="flex-1 flex items-center justify-center gap-1 sm:gap-2 py-2 sm:py-3 px-3 sm:px-4 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
+                      <div className="text-3xl font-bold mb-2">{property.price}</div>
+                      <div className="flex items-center gap-4 text-sm text-gray-300">
+                        <span>{property.beds} beds</span>
+                        <span>{property.baths} baths</span>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Pagination */}
-              {properties.length > ITEMS_PER_PAGE && (
-                <div className="flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4 mt-6 sm:mt-8">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className={`w-full sm:w-auto px-4 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors ${
-                      currentPage === 1
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                        : 'bg-cyan-500 text-white hover:bg-cyan-600'
-                    }`}
-                  >
-                    Previous
-                  </button>
-                  <span className="text-gray-600 dark:text-gray-400 font-medium text-sm sm:text-base order-first sm:order-none">
-                    Page {currentPage} of {Math.ceil(properties.length / ITEMS_PER_PAGE)}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(properties.length / ITEMS_PER_PAGE)))}
-                    disabled={currentPage === Math.ceil(properties.length / ITEMS_PER_PAGE)}
-                    className={`w-full sm:w-auto px-4 sm:px-6 py-2 rounded-lg text-sm sm:text-base font-semibold transition-colors ${
-                      currentPage === Math.ceil(properties.length / ITEMS_PER_PAGE)
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                        : 'bg-cyan-500 text-white hover:bg-cyan-600'
-                    }`}
-                  >
-                    Next
-                  </button>
+              {/* AI Analysis Badge */}
+              <div className="absolute top-4 right-4 px-4 py-2 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-lg shadow-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">AI Analyzing</span>
                 </div>
-              )}
-            </>
-          )}
+              </div>
+            </div>
+
+            {/* Showcase Dots */}
+            <div className="flex justify-center gap-2 mt-4">
+              {showcaseProperties.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentShowcase(index)}
+                  className={`w-2.5 h-2.5 rounded-full transition-all ${
+                    index === currentShowcase
+                      ? 'bg-cyan-500 w-8'
+                      : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* Floating Stats Card */}
+            <div className="absolute -bottom-6 -left-6 bg-white dark:bg-gray-800 rounded-xl shadow-xl p-4 border border-gray-100 dark:border-gray-700 hidden sm:block">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Avg. Time Saved</div>
+                  <div className="text-lg font-bold text-gray-900 dark:text-white">3.5 hours</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
+      </section>
 
-      {/* Property Edit Modal */}
-      <PropertyEdit
-        property={editingProperty}
-        userEmail={userEmail}
-        onSave={handlePropertySaved}
-        onClose={() => {
-          setShowPropertyEdit(false);
-          setEditingProperty(null);
-        }}
-        isOpen={showPropertyEdit}
-      />
+      {/* Animated Stats Section */}
+      <section className="bg-white dark:bg-gray-800 py-16 border-y border-gray-100 dark:border-gray-700">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <AnimatedCounter end={5000} suffix="+" />
+              <div className="text-gray-500 dark:text-gray-400 mt-2 flex items-center justify-center gap-2">
+                <FileText className="w-4 h-4" />
+                Valuations Generated
+              </div>
+            </div>
+            <div className="text-center">
+              <AnimatedCounter end={500} suffix="+" />
+              <div className="text-gray-500 dark:text-gray-400 mt-2 flex items-center justify-center gap-2">
+                <Users className="w-4 h-4" />
+                Active Agents
+              </div>
+            </div>
+            <div className="text-center">
+              <AnimatedCounter end={98} suffix="%" />
+              <div className="text-gray-500 dark:text-gray-400 mt-2 flex items-center justify-center gap-2">
+                <Star className="w-4 h-4" />
+                Satisfaction Rate
+              </div>
+            </div>
+            <div className="text-center">
+              <AnimatedCounter end={35} suffix="min" />
+              <div className="text-gray-500 dark:text-gray-400 mt-2 flex items-center justify-center gap-2">
+                <Clock className="w-4 h-4" />
+                Avg. Report Time
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-      {/* Batch Export Modal */}
-      {showBatchExport && (
-        <BatchExport
-          properties={properties}
-          onClose={() => setShowBatchExport(false)}
-        />
-      )}
+      {/* Features */}
+      <section className="max-w-6xl mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+            Powerful Features for Professionals
+          </h2>
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Everything you need to create accurate, professional property valuations
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-cyan-100 dark:bg-cyan-900/30 rounded-xl flex items-center justify-center mb-4">
+              <BarChart3 className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">AI Photo Analysis</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Our AI analyzes property photos to detect renovations, improvements, and quality factors that affect value.
+            </p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center mb-4">
+              <TrendingUp className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Comparable Sales</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Access recent sales data from your area to benchmark valuations against real market transactions.
+            </p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4">
+              <FileText className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">PDF Reports</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Generate professional valuation reports with market analysis, comparables, and pricing recommendations.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials Section */}
+      <section className="bg-gradient-to-br from-cyan-50 to-emerald-50 dark:from-gray-800 dark:to-gray-900 py-16">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Trusted by Industry Professionals
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">
+              See what real estate agents are saying about PropertyPitch
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {testimonials.map((testimonial, index) => (
+              <div
+                key={index}
+                className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 relative"
+              >
+                {/* Quote Icon */}
+                <Quote className="absolute top-4 right-4 w-8 h-8 text-cyan-100 dark:text-cyan-900" />
+
+                {/* Rating */}
+                <div className="flex gap-1 mb-4">
+                  {[...Array(testimonial.rating)].map((_, i) => (
+                    <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                  ))}
+                </div>
+
+                {/* Quote */}
+                <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
+                  "{testimonial.quote}"
+                </p>
+
+                {/* Author */}
+                <div className="flex items-center gap-3">
+                  <img
+                    src={testimonial.image}
+                    alt={testimonial.name}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                  <div>
+                    <div className="font-semibold text-gray-900 dark:text-white">{testimonial.name}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">{testimonial.role}</div>
+                    <div className="text-xs text-cyan-600 dark:text-cyan-400">{testimonial.company}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing with Feature Comparison Table */}
+      <section className="max-w-6xl mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+            Choose Your Plan
+          </h2>
+          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Select the tier that fits your valuation needs
+          </p>
+        </div>
+
+        {/* Pricing Cards */}
+        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-12">
+          {/* Tier 1 - Property Valuation */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg border-2 border-gray-100 dark:border-gray-700 relative hover:border-cyan-200 dark:hover:border-cyan-800 transition-colors">
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Property Valuation</h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">AI-powered valuations with market data</p>
+            </div>
+            <div className="mb-6">
+              <span className="text-5xl font-bold text-gray-900 dark:text-white">$29</span>
+              <span className="text-gray-600 dark:text-gray-400">/month</span>
+            </div>
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white font-semibold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors mb-4"
+            >
+              Get Started
+            </button>
+            <p className="text-sm text-center text-gray-500 dark:text-gray-400">14-day free trial included</p>
+          </div>
+
+          {/* Tier 2 - Professional */}
+          <div className="bg-gradient-to-br from-cyan-500 to-emerald-500 rounded-2xl p-8 shadow-lg relative transform hover:scale-[1.02] transition-transform">
+            <div className="absolute top-4 right-4 px-3 py-1 bg-white/20 text-white text-xs font-bold rounded-full">
+              MOST POPULAR
+            </div>
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-white mb-2">Professional</h3>
+              <p className="text-cyan-100 text-sm">Enhanced with RP Data & CoreLogic integration</p>
+            </div>
+            <div className="mb-6">
+              <span className="text-5xl font-bold text-white">$79</span>
+              <span className="text-cyan-100">/month</span>
+            </div>
+            <button
+              onClick={() => router.push('/login')}
+              className="w-full py-3 bg-white text-cyan-600 font-bold rounded-xl hover:bg-cyan-50 transition-colors mb-4"
+            >
+              Start Free Trial
+            </button>
+            <p className="text-sm text-center text-cyan-100">14-day free trial included</p>
+          </div>
+        </div>
+
+        {/* Feature Comparison Table */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden max-w-4xl mx-auto">
+          <div className="p-6 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white text-center">
+              Feature Comparison
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900">
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">Feature</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-600 dark:text-gray-400">Property Valuation</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-600 dark:text-gray-400 bg-cyan-50 dark:bg-cyan-900/20">Professional</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {featureComparison.map((row, index) => (
+                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{row.feature}</td>
+                    <td className="px-6 py-4 text-center">
+                      {typeof row.basic === 'boolean' ? (
+                        row.basic ? (
+                          <Check className="w-5 h-5 text-emerald-500 mx-auto" />
+                        ) : (
+                          <X className="w-5 h-5 text-gray-300 dark:text-gray-600 mx-auto" />
+                        )
+                      ) : (
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{row.basic}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center bg-cyan-50/50 dark:bg-cyan-900/10">
+                      {typeof row.pro === 'boolean' ? (
+                        row.pro ? (
+                          <Check className="w-5 h-5 text-emerald-500 mx-auto" />
+                        ) : (
+                          <X className="w-5 h-5 text-gray-300 dark:text-gray-600 mx-auto" />
+                        )
+                      ) : (
+                        <span className="text-sm font-medium text-cyan-600 dark:text-cyan-400">{row.pro}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust Section */}
+      <section className="max-w-6xl mx-auto px-4 py-16">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 sm:p-12 shadow-sm border border-gray-100 dark:border-gray-700 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Shield className="w-6 h-6 text-emerald-500" />
+            <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+              Trusted by Professionals
+            </span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            Used by Real Estate Agents Across Australia
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
+            PropertyPitch helps agents create accurate, professional valuations faster than ever.
+            Save hours on research and deliver client-ready reports in minutes.
+          </p>
+
+          {/* Trust Badges */}
+          <div className="flex flex-wrap justify-center gap-6 opacity-60">
+            <div className="flex items-center gap-2 text-gray-400">
+              <Building className="w-5 h-5" />
+              <span className="font-semibold">Ray White</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              <Building className="w-5 h-5" />
+              <span className="font-semibold">LJ Hooker</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              <Building className="w-5 h-5" />
+              <span className="font-semibold">McGrath</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400">
+              <Building className="w-5 h-5" />
+              <span className="font-semibold">Century 21</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="max-w-6xl mx-auto px-4 py-16">
+        <div className="bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-2xl p-8 sm:p-12 text-center relative overflow-hidden">
+          {/* Background Pattern */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-0 left-0 w-40 h-40 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute bottom-0 right-0 w-60 h-60 bg-white rounded-full translate-x-1/3 translate-y-1/3" />
+          </div>
+
+          <div className="relative">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+              Ready to Transform Your Valuations?
+            </h2>
+            <p className="text-cyan-100 max-w-xl mx-auto mb-8">
+              Start your free trial today. No credit card required.
+            </p>
+            <button
+              onClick={() => router.push('/login')}
+              className="px-8 py-4 bg-white text-cyan-600 font-bold text-lg rounded-xl hover:bg-cyan-50 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02]"
+            >
+              Get Started Free
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Home className="w-5 h-5 text-cyan-500" />
+              <span className="font-semibold text-gray-900 dark:text-white">PropertyPitch</span>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              &copy; {new Date().getFullYear()} PropertyPitch. All rights reserved.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

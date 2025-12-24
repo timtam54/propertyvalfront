@@ -159,22 +159,22 @@ export default function HomePage() {
       />
 
       {/* Header */}
-      <header className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Home className="w-8 h-8 text-cyan-500" />
-            <span className="text-xl font-bold text-gray-900 dark:text-white">PropertyPitch</span>
+            <Home className="w-8 h-8 text-white dark:text-cyan-500" />
+            <span className="text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push('/login')}
-              className="px-4 py-2 text-gray-700 dark:text-gray-300 font-medium hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+              className="px-4 py-2 text-white/90 dark:text-gray-300 font-medium hover:text-white dark:hover:text-cyan-400 transition-colors"
             >
               Sign In
             </button>
             <button
               onClick={() => router.push('/login')}
-              className="px-5 py-2 bg-cyan-500 text-white font-semibold rounded-lg hover:bg-cyan-600 transition-colors"
+              className="px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
             >
               Get Started
             </button>

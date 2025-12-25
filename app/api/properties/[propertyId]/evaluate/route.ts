@@ -566,16 +566,46 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Check if pre-calculated historic sales were passed in the request body
     // This allows the frontend to pass the SAME data that HistoricSalesCard displays
-    let requestBody: { historicSales?: any[] } = {};
+    let requestBody: { historicSales?: any[]; evaluationSource?: 'homely' | 'reports' } = {};
     try {
       requestBody = await request.json();
     } catch {
       // No body or invalid JSON - that's fine, we'll fetch fresh
     }
 
+    const evaluationSource = requestBody.evaluationSource || 'homely';
+    console.log(`[Evaluate] Evaluation source: ${evaluationSource}`);
+
     let soldProperties: SoldProperty[] = [];
 
-    if (requestBody.historicSales && requestBody.historicSales.length > 0) {
+    // When using reports as source, we don't require Homely data
+    if (evaluationSource === 'reports') {
+      console.log(`[Evaluate] Using RP Data / Additional Report as PRIMARY source`);
+      console.log(`[Evaluate] RP Data available: ${!!(property as any).rp_data_report}`);
+      console.log(`[Evaluate] Additional Report available: ${!!(property as any).additional_report}`);
+
+      // Still accept Homely data if provided, but it's supplementary
+      if (requestBody.historicSales && requestBody.historicSales.length > 0) {
+        console.log(`[Evaluate] Also including ${requestBody.historicSales.length} Homely sales as supplementary data`);
+        soldProperties = requestBody.historicSales.map((s: any) => ({
+          id: s.id || crypto.randomUUID(),
+          address: s.address,
+          price: s.price,
+          beds: s.beds,
+          baths: s.baths,
+          cars: s.cars,
+          land_area: s.land_area,
+          property_type: s.property_type,
+          sold_date: s.sold_date,
+          sold_date_raw: s.sold_date_raw ? new Date(s.sold_date_raw) : null,
+          source: s.source || 'homely.com.au',
+          similarity_score: s.similarity,
+          latitude: s.latitude,
+          longitude: s.longitude,
+          distance_km: s.distance,
+        }));
+      }
+    } else if (requestBody.historicSales && requestBody.historicSales.length > 0) {
       // USE PRE-CALCULATED DATA FROM FRONTEND (same as HistoricSalesCard)
       console.log(`[Evaluate] Using ${requestBody.historicSales.length} pre-calculated sales from frontend`);
       soldProperties = requestBody.historicSales.map((s: any) => ({
@@ -638,7 +668,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Calculate statistics
     const stats = calculateStatistics(comparables);
-    const dataSource = comparables.length > 0 ? 'Homely.com.au (live)' : 'AI Knowledge';
+
+    // Determine data source label based on evaluation source (will be updated later after checking reports)
+    const hasRpDataEarly = !!(property as any).rp_data_report;
+    const hasAdditionalReportEarly = !!(property as any).additional_report;
+    const usingReportsAsPrimaryEarly = evaluationSource === 'reports';
+
+    let dataSource: string;
+    if (usingReportsAsPrimaryEarly && (hasRpDataEarly || hasAdditionalReportEarly)) {
+      const sources = [];
+      if (hasRpDataEarly) sources.push('RP Data Report');
+      if (hasAdditionalReportEarly) sources.push('Additional Report');
+      dataSource = sources.join(' + ');
+      if (comparables.length > 0) {
+        dataSource += ' (with Homely supplementary data)';
+      }
+    } else if (comparables.length > 0) {
+      dataSource = 'Homely.com.au (live)';
+    } else {
+      dataSource = 'AI Knowledge';
+    }
 
     // Build comparables text for AI prompt
     let comparablesText = '';
@@ -713,6 +762,7 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
     const hasRpData = !!(property as any).rp_data_report;
     const hasAdditionalReport = !!(property as any).additional_report;
     const hasComparables = comparables.length > 0;
+    const usingReportsAsPrimary = evaluationSource === 'reports';
 
     let dataSourcesNote = '';
     if (hasRpData || hasAdditionalReport || hasComparables) {
@@ -721,6 +771,30 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
       if (hasRpData) sources.push('RP Data property report');
       if (hasAdditionalReport) sources.push('additional property report');
       dataSourcesNote = `\n\nYou have access to: ${sources.join(', ')}. Use ALL available data to inform your valuation.`;
+    }
+
+    // Build priority instruction for RP Data/Additional Report based evaluation
+    let rpDataPriorityInstruction = '';
+    if (usingReportsAsPrimary && (hasRpData || hasAdditionalReport)) {
+      rpDataPriorityInstruction = `
+⚠️⚠️⚠️ PRIMARY DATA SOURCE PRIORITY ⚠️⚠️⚠️
+The user has selected RP DATA REPORT and/or ADDITIONAL REPORT as the PRIMARY valuation source.
+
+YOUR VALUATION MUST:
+1. PRIORITIZE any valuation estimates, capital values, or price assessments found in the RP Data Report or Additional Report
+2. Extract and use numerical values from these reports (e.g., "CV: $X", "Land Value: $X", "Estimated Value: $X")
+3. Treat the report valuations as AUTHORITATIVE - they should be the foundation of your estimate
+4. Only use Homely comparable sales as SUPPLEMENTARY reference, not as the primary valuation basis
+5. If the reports contain a valuation range or estimate, your final estimate should align closely with that range
+
+If the RP Data Report contains a Capital Value (CV), Rateable Value (RV), or similar official valuation:
+- Use this as your PRIMARY anchor point
+- Apply appropriate adjustments for market conditions and property improvements
+- Explain how you derived your estimate from the report values
+
+${hasRpData ? 'RP DATA REPORT IS AVAILABLE - EXTRACT AND USE ITS VALUATIONS' : ''}
+${hasAdditionalReport ? 'ADDITIONAL REPORT IS AVAILABLE - EXTRACT AND USE ITS VALUATIONS' : ''}
+`;
     }
 
     const openai = getOpenAI();
@@ -841,8 +915,22 @@ ${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${proper
     const maxReasonableValue = Math.round(maxComparablePrice * 1.15);
     const avgComparablePrice = comparables.length > 0 ? Math.round(comparables.reduce((sum, c) => sum + c.price, 0) / comparables.length) : 0;
 
-    const systemPrompt = `You are an expert Australian property valuer with expertise in assessing property condition and build quality from photos.
+    // Build the valuation constraints section based on data source
+    let valuationConstraints = '';
+    if (usingReportsAsPrimary && (hasRpData || hasAdditionalReport)) {
+      valuationConstraints = `
+⚠️⚠️⚠️ CRITICAL VALUATION CONSTRAINTS (RP DATA / ADDITIONAL REPORT MODE) ⚠️⚠️⚠️
+1. Your valuation MUST be primarily based on the RP Data Report and/or Additional Report values
+2. Extract any Capital Value (CV), Rateable Value (RV), Land Value, or Estimated Value from the reports
+3. Use these report values as your PRIMARY anchor - NOT the Homely comparable sales
+4. Homely data (if provided) should only be used as SUPPLEMENTARY verification
+5. Explain how you derived your estimate from the report values
+6. Time adjustments from report date: ~5% per year maximum
+7. Quality/condition adjustments: -10% to +10% maximum
 
+${rpDataPriorityInstruction}`;
+    } else {
+      valuationConstraints = `
 ⚠️⚠️⚠️ CRITICAL VALUATION CONSTRAINTS ⚠️⚠️⚠️
 1. Your valuation MUST be grounded in the comparable sales data provided
 2. The comparable sales range from ${formatPrice(minComparablePrice)} to ${formatPrice(maxComparablePrice)}
@@ -856,7 +944,11 @@ ${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${proper
 In the Market Analysis section, you MUST copy the EXACT addresses and prices from the Historic Property Sales data provided below.
 DO NOT INVENT, FABRICATE, OR MAKE UP ANY ADDRESSES OR SALE PRICES.
 DO NOT use placeholder addresses like "21 Example St" or "nearby property" or "a similar 3-bedroom property".
-EVERY address you cite MUST be copied CHARACTER-FOR-CHARACTER from the data below.
+EVERY address you cite MUST be copied CHARACTER-FOR-CHARACTER from the data below.`;
+    }
+
+    const systemPrompt = `You are an expert Australian property valuer with expertise in assessing property condition and build quality from photos.
+${valuationConstraints}
 
 ${valuationAnchor}
 

@@ -9,6 +9,8 @@ import { usePageView } from '@/hooks/useAudit';
 import ValuationQuality from '@/components/ValuationQuality';
 import HistoricSalesCard from '@/components/HistoricSalesCard';
 import DarkModeToggle from '@/components/DarkModeToggle';
+import EvaluationSourceModal from '@/components/EvaluationSourceModal';
+import { useMsalSafe, useGoogleAuth } from '@/components/AuthProvider';
 import type {
   ValuationHistoryEntry,
   ConfidenceScoring,
@@ -35,6 +37,8 @@ interface Property {
   property_type?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  rp_data_report?: string | null;
+  additional_report?: string | null;
   // New valuation quality fields
   valuation_history?: ValuationHistoryEntry[];
   confidence_scoring?: ConfidenceScoring | null;
@@ -91,6 +95,14 @@ export default function PropertyEvaluationPage() {
   // Track page view for audit with property ID
   usePageView('property-evaluation', propertyId ? parseInt(propertyId, 10) || 0 : 0);
 
+  // Auth hooks for user info
+  const { accounts } = useMsalSafe();
+  const { googleUser } = useGoogleAuth();
+  const msalUser = accounts[0];
+  const userName = googleUser?.name || msalUser?.name || googleUser?.email || msalUser?.username || '';
+  const userEmail = googleUser?.email || msalUser?.username || '';
+  const userAvatar = googleUser?.picture || null;
+
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
@@ -104,6 +116,36 @@ export default function PropertyEvaluationPage() {
   const [showMarketingModal, setShowMarketingModal] = useState(false);
   const [pricingOptions, setPricingOptions] = useState<PricingOption[]>([]);
   const [marketingStrategyText, setMarketingStrategyText] = useState('');
+
+  // Evaluation Source Modal state
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [evaluationSource, setEvaluationSource] = useState<'homely' | 'reports' | null>(null);
+
+  /**
+   * Check if text contains numerical value estimates (prices/valuations)
+   * Looks for Australian dollar amounts in typical valuation formats
+   */
+  const hasNumericalEstimates = (text: string | null | undefined): boolean => {
+    if (!text) return false;
+
+    // Patterns for Australian property valuations
+    const patterns = [
+      // Standard dollar amounts: $500,000 or $1,200,000
+      /\$\s*[\d,]+(?:\.\d{2})?/,
+      // Million notation: $1.2M or $1.2 million
+      /\$\s*[\d.]+\s*(?:m|million)/i,
+      // Value ranges: $500,000 - $600,000
+      /\$\s*[\d,]+\s*[-–to]+\s*\$\s*[\d,]+/i,
+      // Valuation keywords with numbers: "valued at $X" or "estimate: $X"
+      /(?:valu(?:e|ation|ed)|estimate|worth|price|assessment)\s*(?:at|of|:)?\s*\$\s*[\d,]+/i,
+      // Land value, capital value patterns
+      /(?:land|capital|improved|unimproved)\s*value\s*(?:of|:)?\s*\$\s*[\d,]+/i,
+      // CV or RV patterns: "CV: $500,000"
+      /(?:cv|rv|gv|uv)\s*(?:of|:)?\s*\$\s*[\d,]+/i,
+    ];
+
+    return patterns.some(pattern => pattern.test(text));
+  };
 
   useEffect(() => {
     fetchProperty();
@@ -190,24 +232,52 @@ export default function PropertyEvaluationPage() {
     }
   };
 
-  const evaluateProperty = async () => {
+  // Handler for when user clicks Evaluate/Re-evaluate button
+  const handleEvaluateClick = () => {
+    const hasRpData = !!(property?.rp_data_report);
+    const hasAdditionalReport = !!(property?.additional_report);
+    const rpDataHasEstimates = hasNumericalEstimates(property?.rp_data_report);
+    const additionalReportHasEstimates = hasNumericalEstimates(property?.additional_report);
+
+    // If no RP Data or Additional Report, go straight to Homely evaluation
+    if (!hasRpData && !hasAdditionalReport) {
+      // Show confirmation dialog for Homely-only evaluation
+      setShowSourceModal(true);
+      return;
+    }
+
+    // If reports exist, show the source selection modal
+    setShowSourceModal(true);
+  };
+
+  // Handler for source modal confirmation
+  const handleSourceConfirm = (source: 'homely' | 'reports') => {
+    setShowSourceModal(false);
+    setEvaluationSource(source);
+    evaluateProperty(source);
+  };
+
+  const evaluateProperty = async (source: 'homely' | 'reports' = 'homely') => {
     setEvaluating(true);
     setError(null);
     setWarning(null);
 
-    // CRITICAL: Check that historic sales data is available
-    // The evaluation MUST use the same data shown in HistoricSalesCard
-    console.log(`[EvaluatePage] Sending ${historicSalesData.length} historic sales to API`);
-    if (historicSalesData.length > 0) {
-      console.log(`[EvaluatePage] Top 3 sales being sent:`);
-      historicSalesData.slice(0, 3).forEach((s, i) => {
-        console.log(`  ${i + 1}. ${s.address} - $${s.price} - ${s.similarity}% match - ${s.distance}km`);
-      });
+    // For Homely source, check that historic sales data is available
+    if (source === 'homely') {
+      console.log(`[EvaluatePage] Sending ${historicSalesData.length} historic sales to API`);
+      if (historicSalesData.length > 0) {
+        console.log(`[EvaluatePage] Top 3 sales being sent:`);
+        historicSalesData.slice(0, 3).forEach((s, i) => {
+          console.log(`  ${i + 1}. ${s.address} - $${s.price} - ${s.similarity}% match - ${s.distance}km`);
+        });
+      } else {
+        console.warn(`[EvaluatePage] WARNING: historicSalesData is EMPTY!`);
+        setError('Please wait for the Historic Property Sales section to load before evaluating.');
+        setEvaluating(false);
+        return;
+      }
     } else {
-      console.warn(`[EvaluatePage] WARNING: historicSalesData is EMPTY!`);
-      setError('Please wait for the Historic Property Sales section to load before evaluating.');
-      setEvaluating(false);
-      return;
+      console.log(`[EvaluatePage] Using RP Data / Additional Report as primary source`);
     }
 
     try {
@@ -217,7 +287,8 @@ export default function PropertyEvaluationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          historicSales: historicSalesData, // Pass the pre-calculated data from HistoricSalesCard
+          historicSales: source === 'homely' ? historicSalesData : [], // Only pass Homely data if that source is selected
+          evaluationSource: source, // Tell the API which source to prioritize
         }),
       });
 
@@ -684,6 +755,17 @@ export default function PropertyEvaluationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      {/* Evaluation Source Modal */}
+      <EvaluationSourceModal
+        isOpen={showSourceModal}
+        onClose={() => setShowSourceModal(false)}
+        onConfirm={handleSourceConfirm}
+        hasRpData={!!(property?.rp_data_report)}
+        hasAdditionalReport={!!(property?.additional_report)}
+        rpDataHasEstimates={hasNumericalEstimates(property?.rp_data_report)}
+        additionalReportHasEstimates={hasNumericalEstimates(property?.additional_report)}
+      />
+
       {/* Marketing Strategy Modal */}
       {showMarketingModal && (
         <>
@@ -807,7 +889,28 @@ export default function PropertyEvaluationPage() {
             <span className="text-2xl">🏠</span>
             <h1 className="text-lg font-bold text-white dark:text-cyan-500">PropertyPitch</h1>
           </div>
-          <DarkModeToggle />
+          <div className="flex items-center gap-3">
+            <DarkModeToggle />
+            {/* User Avatar/Name */}
+            {(userName || userEmail) && (
+              <div className="flex items-center gap-2">
+                {userAvatar ? (
+                  <img
+                    src={userAvatar}
+                    alt={userName || userEmail}
+                    className="w-8 h-8 rounded-full border-2 border-white/30"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-semibold text-sm border-2 border-white/30">
+                    {(userName || userEmail).charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-white text-sm font-medium hidden sm:block max-w-[150px] truncate">
+                  {userName || userEmail}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -935,15 +1038,15 @@ export default function PropertyEvaluationPage() {
             </div>
 
             <button
-              onClick={evaluateProperty}
-              disabled={evaluating || historicSalesData.length === 0}
+              onClick={handleEvaluateClick}
+              disabled={evaluating}
               style={{
-                background: (evaluating || historicSalesData.length === 0) ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: evaluating ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 color: 'white',
                 padding: '1.25rem 2.5rem',
                 borderRadius: '12px',
                 border: 'none',
-                cursor: (evaluating || historicSalesData.length === 0) ? 'not-allowed' : 'pointer',
+                cursor: evaluating ? 'not-allowed' : 'pointer',
                 fontSize: '1.1rem',
                 fontWeight: '600',
                 display: 'inline-flex',
@@ -951,7 +1054,7 @@ export default function PropertyEvaluationPage() {
                 gap: '0.75rem',
               }}
             >
-              ✨ {evaluating ? 'Evaluating... Please wait up to 2 minutes' : historicSalesData.length === 0 ? 'Loading comparable sales...' : 'Start Property Evaluation'}
+              ✨ {evaluating ? 'Evaluating... Please wait up to 2 minutes' : 'Start Property Evaluation'}
             </button>
 
             {(!property.images || property.images.length === 0) && (
@@ -1186,7 +1289,7 @@ export default function PropertyEvaluationPage() {
             {/* Action Buttons */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem', padding: '1rem 0' }}>
               <button
-                onClick={evaluateProperty}
+                onClick={handleEvaluateClick}
                 disabled={evaluating}
                 style={{
                   background: evaluating ? '#94a3b8' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',

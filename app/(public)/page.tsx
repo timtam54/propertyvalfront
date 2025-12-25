@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
-import { Home, TrendingUp, FileText, Check, X, ArrowRight, BarChart3, Shield, Zap, Star, Quote, MapPin, Building, Users, Clock } from 'lucide-react';
+import { Home, TrendingUp, FileText, Check, X, ArrowRight, BarChart3, Shield, Zap, Star, Quote, MapPin, Building, Users, Clock, LogIn } from 'lucide-react';
 
 // JSON-LD structured data for SEO
 const jsonLd = {
@@ -165,20 +165,13 @@ export default function HomePage() {
             <Home className="w-8 h-8 text-white dark:text-cyan-500" />
             <span className="text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push('/login')}
-              className="px-4 py-2 text-white/90 dark:text-gray-300 font-medium hover:text-white dark:hover:text-cyan-400 transition-colors"
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => router.push('/login')}
-              className="px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              Get Started
-            </button>
-          </div>
+          <button
+            onClick={() => router.push('/login')}
+            className="flex items-center gap-2 px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <LogIn className="w-4 h-4" />
+            Sign In
+          </button>
         </div>
       </header>
 

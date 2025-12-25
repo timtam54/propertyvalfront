@@ -780,20 +780,22 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
 ⚠️⚠️⚠️ PRIMARY DATA SOURCE PRIORITY ⚠️⚠️⚠️
 The user has selected RP DATA REPORT and/or ADDITIONAL REPORT as the PRIMARY valuation source.
 
-YOUR VALUATION MUST:
-1. PRIORITIZE any valuation estimates, capital values, or price assessments found in the RP Data Report or Additional Report
-2. Extract and use numerical values from these reports (e.g., "CV: $X", "Land Value: $X", "Estimated Value: $X")
-3. Treat the report valuations as AUTHORITATIVE - they should be the foundation of your estimate
-4. Only use Homely comparable sales as SUPPLEMENTARY reference, not as the primary valuation basis
-5. If the reports contain a valuation range or estimate, your final estimate should align closely with that range
+**REPORT SECTION INSTRUCTIONS:**
 
-If the RP Data Report contains a Capital Value (CV), Rateable Value (RV), or similar official valuation:
-- Use this as your PRIMARY anchor point
-- Apply appropriate adjustments for market conditions and property improvements
-- Explain how you derived your estimate from the report values
+## Market Analysis Section:
+- STILL include the Homely comparable sales data (addresses and prices) for market context
+- This provides useful reference information about recent sales in the area
+- Format these as "Comparable Sales Data" subsection
 
-${hasRpData ? 'RP DATA REPORT IS AVAILABLE - EXTRACT AND USE ITS VALUATIONS' : ''}
-${hasAdditionalReport ? 'ADDITIONAL REPORT IS AVAILABLE - EXTRACT AND USE ITS VALUATIONS' : ''}
+## Valuation Assessment Section:
+- Your Starting Point MUST come from the RP Data Report or Additional Report - NOT from Homely sales
+- Look for values like: Capital Value, CV, RV, Land Value, Estimated Value, recent sale price, valuation estimate
+- Example: "**Starting Point:** RP Data Report Capital Value of $X" or "**Starting Point:** Additional Report valuation of $X"
+- DO NOT say "Starting Point: Recent sale price of $X" if that price came from Homely data
+- Apply adjustments from the report values, not from comparable sales
+
+${hasRpData ? '📊 RP DATA REPORT IS AVAILABLE - EXTRACT AND USE ITS VALUATIONS FOR THE VALUATION ASSESSMENT' : ''}
+${hasAdditionalReport ? '📄 ADDITIONAL REPORT IS AVAILABLE - EXTRACT AND USE ITS VALUATIONS FOR THE VALUATION ASSESSMENT' : ''}
 `;
     }
 
@@ -920,13 +922,22 @@ ${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${proper
     if (usingReportsAsPrimary && (hasRpData || hasAdditionalReport)) {
       valuationConstraints = `
 ⚠️⚠️⚠️ CRITICAL VALUATION CONSTRAINTS (RP DATA / ADDITIONAL REPORT MODE) ⚠️⚠️⚠️
-1. Your valuation MUST be primarily based on the RP Data Report and/or Additional Report values
-2. Extract any Capital Value (CV), Rateable Value (RV), Land Value, or Estimated Value from the reports
-3. Use these report values as your PRIMARY anchor - NOT the Homely comparable sales
-4. Homely data (if provided) should only be used as SUPPLEMENTARY verification
-5. Explain how you derived your estimate from the report values
-6. Time adjustments from report date: ~5% per year maximum
-7. Quality/condition adjustments: -10% to +10% maximum
+
+**IMPORTANT: TWO SEPARATE PURPOSES FOR DATA**
+
+1. **FOR DISPLAY ONLY (Market Analysis section):** Include the Homely comparable sales data provided below.
+   List these properties with their addresses and sale prices for REFERENCE purposes only.
+
+2. **FOR VALUATION (Valuation Assessment section):** Your valuation MUST be based on the RP Data Report
+   and/or Additional Report values - NOT the Homely comparable sales.
+
+**VALUATION RULES:**
+- Extract any Capital Value (CV), Rateable Value (RV), Land Value, Estimated Value, or sale prices from the RP Data/Additional Reports
+- Use these report values as your PRIMARY anchor for the Valuation Assessment
+- The Homely comparable sales are for MARKET CONTEXT only - do NOT use them as the starting point for your valuation
+- In the Valuation Assessment, clearly state: "Based on RP Data Report values..." or "Based on Additional Report values..."
+- Time adjustments from report date: ~5% per year maximum
+- Quality/condition adjustments: -10% to +10% maximum
 
 ${rpDataPriorityInstruction}`;
     } else {

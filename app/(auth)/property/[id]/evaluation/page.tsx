@@ -282,13 +282,14 @@ export default function PropertyEvaluationPage() {
 
     try {
       // Use local API route for web scraping evaluation
-      // PASS THE HISTORIC SALES DATA from HistoricSalesCard to ensure consistency
+      // ALWAYS pass Homely data for display in the report (Market Analysis section)
+      // The evaluationSource tells the API which data to use for the actual valuation
       const response = await fetch(`/api/properties/${propertyId}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          historicSales: source === 'homely' ? historicSalesData : [], // Only pass Homely data if that source is selected
-          evaluationSource: source, // Tell the API which source to prioritize
+          historicSales: historicSalesData, // Always pass Homely data for display
+          evaluationSource: source, // Tell the API which source to prioritize for valuation
         }),
       });
 

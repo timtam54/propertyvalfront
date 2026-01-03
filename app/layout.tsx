@@ -19,13 +19,41 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "EstatePro - Property Valuation Platform",
-  description: "AI-powered property listing and evaluation platform for the Australian market",
+  metadataBase: new URL("https://propertyval-web.azurewebsites.net"),
+  title: {
+    default: "PropertyPitch - AI Property Valuation & Facebook Marketing",
+    template: "%s | PropertyPitch"
+  },
+  description: "AI-powered property valuation platform with market analysis, comparable sales, and Facebook post generation. Get accurate property valuations and create engaging social media marketing content for real estate listings.",
   manifest: "/manifest.json",
+  keywords: [
+    "property valuation",
+    "market valuation",
+    "AI property valuation",
+    "Facebook property posts",
+    "real estate marketing",
+    "property appraisal",
+    "Australian property valuation",
+    "real estate Facebook marketing",
+    "property market analysis",
+    "comparable sales data"
+  ],
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "EstatePro",
+    title: "PropertyPitch",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_AU",
+    siteName: "PropertyPitch",
+    title: "PropertyPitch - AI Property Valuation & Facebook Marketing",
+    description: "Get accurate property valuations and generate engaging Facebook posts for your real estate listings with AI-powered analysis.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PropertyPitch - AI Property Valuation",
+    description: "Property valuation, market analysis & Facebook marketing for real estate professionals.",
   },
 };
 

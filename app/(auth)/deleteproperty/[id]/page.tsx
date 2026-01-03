@@ -247,11 +247,11 @@ export default function PropertyDetailPage() {
     }
   };
 
-  // Facebook Ad functions
+  // Facebook Ad functions - calls Next.js API route directly
   const generateFacebookAd = async () => {
     setGeneratingFbAd(true);
     try {
-      const response = await axios.post(`${API}/properties/${propertyId}/generate-facebook-ad`, {}, { timeout: 30000 });
+      const response = await axios.post(`/api/properties/${propertyId}/generate-facebook-ad`, {}, { timeout: 60000 });
       if (response.data?.ad_copy) {
         setFbAdCopy(response.data.ad_copy);
         setShowFbAdModal(true);
@@ -265,11 +265,11 @@ export default function PropertyDetailPage() {
     }
   };
 
-  // Facebook Post functions
+  // Facebook Post functions - calls Next.js API route directly
   const generateFacebookPost = async () => {
     setGeneratingFbPost(true);
     try {
-      const response = await axios.post(`${API}/properties/${propertyId}/generate-facebook-post`, {}, { timeout: 30000 });
+      const response = await axios.post(`/api/properties/${propertyId}/generate-facebook-post`, {}, { timeout: 60000 });
       if (response.data?.post_content) {
         setFbPostContent(response.data.post_content);
         setShowFbPostModal(true);

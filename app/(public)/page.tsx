@@ -11,8 +11,8 @@ const jsonLd = {
   '@type': 'SoftwareApplication',
   name: 'PropertyPitch',
   applicationCategory: 'BusinessApplication',
-  operatingSystem: 'Web',
-  description: 'AI-powered property valuation and real estate analytics platform for agents and investors.',
+  operatingSystem: 'Web, iOS, Android',
+  description: 'AI-powered property valuation and market valuation platform with Facebook post generation for real estate marketing. Get accurate property valuations, comparable sales analysis, and create engaging social media content for property listings.',
   offers: {
     '@type': 'Offer',
     price: '0',
@@ -28,6 +28,17 @@ const jsonLd = {
     name: 'PropertyPitch',
     url: 'https://propertyval-web.azurewebsites.net',
   },
+  featureList: [
+    'AI-Powered Property Valuation',
+    'Market Valuation Analysis',
+    'Comparable Sales Data',
+    'Facebook Post Generation',
+    'Social Media Marketing Tools',
+    'Professional PDF Reports',
+    'Real Estate Market Analysis',
+    'Property Investment Analytics'
+  ],
+  keywords: 'property valuation, market valuation, Facebook property posts, real estate marketing, AI valuation, property appraisal, house valuation, real estate Facebook marketing'
 };
 
 // Animated Counter Component
@@ -191,7 +202,7 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 mb-8">
-              Get accurate property valuations using AI analysis, comparable sales data, and market insights.
+              Get accurate property valuations and market analysis using AI. Generate Facebook posts and professional marketing content.
               Perfect for agents, investors, and property professionals.
             </p>
             <div className="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4">
@@ -359,6 +370,39 @@ export default function HomePage() {
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">PDF Reports</h3>
             <p className="text-gray-600 dark:text-gray-400">
               Generate professional valuation reports with market analysis, comparables, and pricing recommendations.
+            </p>
+          </div>
+        </div>
+
+        {/* Second row of features */}
+        <div className="grid md:grid-cols-3 gap-8 mt-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-4">
+              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Facebook Marketing</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Generate engaging Facebook posts and social media content for your property listings with AI-powered copywriting.
+            </p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center mb-4">
+              <TrendingUp className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Market Valuation</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Get comprehensive market valuation insights with suburb trends, growth forecasts, and investment potential analysis.
+            </p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
+            <div className="w-12 h-12 bg-pink-100 dark:bg-pink-900/30 rounded-xl flex items-center justify-center mb-4">
+              <Users className="w-6 h-6 text-pink-600 dark:text-pink-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Mobile App</h3>
+            <p className="text-gray-600 dark:text-gray-400">
+              Access property valuations on-the-go with our web and mobile app. Perfect for agents in the field.
             </p>
           </div>
         </div>

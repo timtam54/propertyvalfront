@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Script from "next/script";
 import { toast } from "sonner";
 import { Home, Bed, Bath, Car, Building, Edit, Trash2, Search, Upload, CheckCircle, Settings, User, X, LogOut, Menu, MapPin, List, Filter, Star, Download, Plus, TrendingUp, Clock, DollarSign } from "lucide-react";
 import { API } from "@/lib/config";
@@ -13,13 +12,7 @@ import PropertyImageCarousel from "@/components/PropertyImageCarousel";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import { useMsalSafe, useIsAuthenticatedSafe, useGoogleAuth } from "@/components/AuthProvider";
 import { usePageView } from "@/hooks/useAudit";
-
-declare global {
-  interface Window {
-    google: typeof google;
-    initGooglePlaces: () => void;
-  }
-}
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 
 interface PropertyNote {
   id: string;
@@ -123,7 +116,7 @@ export default function HomePage() {
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [googleLoaded, setGoogleLoaded] = useState(false);
+  const { loaded: googleLoaded } = useGoogleMaps();
   const [showPropertyEdit, setShowPropertyEdit] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [showFavouritesOnly, setShowFavouritesOnly] = useState(false);
@@ -163,37 +156,6 @@ export default function HomePage() {
     };
     fetchUserAdmin();
   }, [isAuthenticated, userEmail]);
-
-  // Poll for Google Maps to be loaded
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    let timeout: NodeJS.Timeout | null = null;
-
-    const checkGoogleMaps = () => {
-      if (typeof window !== 'undefined' && window.google?.maps?.places) {
-        setGoogleLoaded(true);
-        if (interval) clearInterval(interval);
-        if (timeout) clearTimeout(timeout);
-        return true;
-      }
-      return false;
-    };
-
-    if (checkGoogleMaps()) return;
-
-    interval = setInterval(() => {
-      checkGoogleMaps();
-    }, 100);
-
-    timeout = setTimeout(() => {
-      if (interval) clearInterval(interval);
-    }, 10000);
-
-    return () => {
-      if (interval) clearInterval(interval);
-      if (timeout) clearTimeout(timeout);
-    };
-  }, []);
 
   const paginatedProperties = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -379,7 +341,7 @@ export default function HomePage() {
                         ${property.beds} bed • ${property.baths} bath • ${property.carpark} car
                       </p>
                       ${property.price ? `<p style="color: #06b6d4; font-weight: bold; font-size: 14px;">$${property.price.toLocaleString()}</p>` : ''}
-                      <a href="/property/${property.id}" style="color: #06b6d4; font-size: 12px; text-decoration: underline;">View Details →</a>
+                      <a href="/property/${property.id}/evaluation" style="color: #06b6d4; font-size: 12px; text-decoration: underline;">View Details →</a>
                     </div>
                   `
                 });
@@ -537,18 +499,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-      {/* Google Maps Script */}
-      <Script
-        src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
-        strategy="afterInteractive"
-        onLoad={() => {
-          setGoogleLoaded(true);
-        }}
-        onError={(e) => {
-          console.error("Failed to load Google Maps API:", e);
-        }}
-      />
-
       {/* Header */}
       <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -980,7 +930,7 @@ export default function HomePage() {
                   <div
                     key={property.id}
                     className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all cursor-pointer group"
-                    onClick={() => router.push(`/property/${property.id}`)}
+                    onClick={() => router.push(`/property/${property.id}/evaluation`)}
                   >
                     {/* Image Carousel with Quick Preview */}
                     <div className="relative">

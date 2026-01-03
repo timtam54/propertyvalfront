@@ -147,6 +147,8 @@ export interface Property {
   notes?: PropertyNote[];
   is_favourite?: boolean;
   tags?: string[];
+  // Estimated value range from valuation (RP Data or Homely)
+  estimated_value_range?: string | null;
 }
 
 // Property note/comment

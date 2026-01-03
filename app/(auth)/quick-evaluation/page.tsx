@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { toast } from "sonner";
-import { ArrowLeft, Home, Loader2, TrendingUp, AlertCircle, DollarSign, Sparkles, CheckCircle } from "lucide-react";
+import { ArrowLeft, Home, Loader2, TrendingUp, AlertCircle, DollarSign, Sparkles, CheckCircle, GripVertical } from "lucide-react";
 import { API } from "@/lib/config";
 import { usePageView } from "@/hooks/useAudit";
-
-// Window interface for Google Places already declared in app/page.tsx
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 
 type EvaluationStage = 'idle' | 'queued' | 'fetching_data' | 'generating_evaluation' | 'completed' | 'failed';
 
@@ -58,7 +57,7 @@ export default function QuickEvaluationPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [googleLoaded, setGoogleLoaded] = useState(false);
+  const { loaded: googleLoaded } = useGoogleMaps();
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
@@ -72,57 +71,9 @@ export default function QuickEvaluationPage() {
     features: "",
   });
 
-  // Load Google Places API
-  useEffect(() => {
-    const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-    if (!GOOGLE_API_KEY) {
-      console.warn('Google API key not configured');
-      return;
-    }
-
-    if (window.google?.maps?.places) {
-      setGoogleLoaded(true);
-      return;
-    }
-
-    // Check if a Google Maps script is already loading
-    const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
-    if (existingScript) {
-      // Script exists, poll for it to be ready
-      const checkInterval = setInterval(() => {
-        if (window.google?.maps?.places) {
-          clearInterval(checkInterval);
-          setGoogleLoaded(true);
-        }
-      }, 100);
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        clearInterval(checkInterval);
-        if (window.google?.maps?.places) {
-          setGoogleLoaded(true);
-        }
-      }, 10000);
-      return;
-    }
-
-    // Create callback function
-    window.initGooglePlaces = () => {
-      setGoogleLoaded(true);
-    };
-
-    // Load the script
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places&callback=initGooglePlaces`;
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-
-    return () => {
-      // Cleanup
-      window.initGooglePlaces = undefined as unknown as () => void;
-    };
-  }, []);
+  // Drag and drop state for images
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Initialize autocomplete when Google is loaded and input is available
   useEffect(() => {
@@ -158,47 +109,108 @@ export default function QuickEvaluationPage() {
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';  // Clear the input for re-upload
 
-    if (uploadedImages.length + files.length > 10) {
-      toast.error("Maximum 10 images allowed for quick evaluation");
+    if (files.length === 0) return;
+
+    const totalImages = uploadedImages.length + files.length;
+    if (totalImages > 25) {
+      toast.error("Maximum 25 images allowed");
       return;
     }
 
-    const loadingToast = toast.loading(`Uploading ${files.length} image${files.length > 1 ? 's' : ''}...`);
+    const loadingToast = toast.loading(`Uploading ${files.length} image(s)...`);
 
     try {
-      // Upload to Azure Blob Storage
-      const formData = new FormData();
-      Array.from(files).forEach((file) => formData.append('files', file));
+      const formDataUpload = new FormData();
+      files.forEach((file) => formDataUpload.append('files', file));
 
       const response = await fetch('/api/upload', {
         method: 'POST',
-        body: formData,
+        body: formDataUpload,
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+        const contentType = response.headers.get('content-type');
+        const status = response.status;
+
+        let errorMessage = '';
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || 'Upload failed';
+        } else {
+          const errorText = await response.text();
+          errorMessage = errorText || '';
+        }
+
+        if (status === 403 || errorMessage.toLowerCase().includes('forbidden')) {
+          throw new Error(`Upload blocked (Error 403). Try: 1) Disable VPN/ad-blockers 2) Try a different network`);
+        } else if (status === 413) {
+          throw new Error('File too large. Please use smaller images (max 4.5MB each).');
+        } else {
+          throw new Error(`Upload failed (${status}): ${errorMessage.slice(0, 100)}`);
+        }
       }
 
-      const { urls } = await response.json();
-
+      const data = await response.json();
       toast.dismiss(loadingToast);
-      setUploadedImages([...uploadedImages, ...urls]);
-      toast.success(`${files.length} image${files.length > 1 ? 's' : ''} uploaded`);
+      toast.success(`${files.length} image(s) uploaded`);
 
+      setUploadedImages((prev) => [...prev, ...data.urls]);
     } catch (error) {
-      console.error('Error uploading images:', error);
       toast.dismiss(loadingToast);
-      toast.error(error instanceof Error ? error.message : 'Failed to upload images. Please try again.');
+      console.error('Error uploading images:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to upload images');
     }
   };
 
-  const removeImage = (index: number) => {
-    setUploadedImages(prev => prev.filter((_, i) => i !== index));
-  };
+  const removeImage = useCallback((index: number) => {
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedIndex !== null && index !== draggedIndex) {
+      setDragOverIndex(index);
+    }
+  }, [draggedIndex]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    setUploadedImages((prev) => {
+      const newImages = [...prev];
+      const [draggedImage] = newImages.splice(draggedIndex, 1);
+      newImages.splice(dropIndex, 0, draggedImage);
+      return newImages;
+    });
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  }, [draggedIndex]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  }, []);
 
   const pollForResult = async (jobId: string) => {
     const maxAttempts = 60; // 2 minutes max
@@ -258,29 +270,33 @@ export default function QuickEvaluationPage() {
     setStage('queued');
 
     try {
-      const payload = {
+      // Create property first, then redirect to full evaluation page
+      // This uses the comprehensive evaluation system with Homely data
+      const propertyData = {
+        beds: parseInt(formData.beds),
+        baths: parseInt(formData.baths),
+        carpark: parseInt(formData.carpark),
         location: formData.location,
-        beds: parseInt(formData.beds) || 0,
-        baths: parseInt(formData.baths) || 0,
-        carpark: parseInt(formData.carpark) || 0,
-        size: formData.size ? parseFloat(formData.size) : null,
-        property_type: formData.property_type || "Property",
         price: formData.price ? parseFloat(formData.price) : null,
+        size: formData.size ? parseFloat(formData.size) : null,
+        property_type: formData.property_type || "House",
         features: formData.features || null,
-        images: uploadedImages
+        images: uploadedImages,
       };
 
-      const response = await axios.post(`${API}/evaluate-quick`, payload);
+      toast.info("Creating property...");
+      const response = await axios.post(`${API}/properties`, propertyData);
 
-      if (response.data.success && response.data.job_id) {
-        toast.info("Evaluation started...");
-        await pollForResult(response.data.job_id);
+      if (response.data && response.data.id) {
+        toast.success("Property created! Redirecting to evaluation...");
+        // Redirect to the full evaluation page which has proper Homely data integration
+        router.push(`/property/${response.data.id}/evaluation`);
       } else {
-        throw new Error('Failed to start evaluation');
+        throw new Error('Failed to create property');
       }
     } catch (err: any) {
-      console.error("Error starting evaluation:", err);
-      const message = err.response?.data?.detail || "Failed to start evaluation. Make sure the backend is running and API keys are configured.";
+      console.error("Error creating property:", err);
+      const message = err.response?.data?.detail || "Failed to create property. Please try again.";
       setError(message);
       toast.error(message);
       setLoading(false);
@@ -315,7 +331,7 @@ export default function QuickEvaluationPage() {
 
       if (response.data && response.data.id) {
         toast.success("Property saved successfully!");
-        router.push(`/property/${response.data.id}`);
+        router.push(`/property/${response.data.id}/evaluation`);
       }
     } catch (error: any) {
       console.error("Error saving property:", error);
@@ -526,64 +542,77 @@ export default function QuickEvaluationPage() {
               </div>
 
               {/* Image Upload Section */}
-              <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.25rem', color: '#334155', fontSize: '0.9rem' }}>Property Photos (Optional - up to 10)</label>
-                <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '0.75rem' }}>
-                  Upload photos for more accurate valuation with condition assessment, or we'll search for images online based on the address
-                </p>
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Property Images (up to 25)</label>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   multiple
                   onChange={handleImageUpload}
                   disabled={loading}
-                  style={{ width: '100%', padding: '0.5rem', border: '2px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem' }}
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-cyan-50 file:text-cyan-700 hover:file:bg-cyan-100 transition-all cursor-pointer"
                 />
 
                 {uploadedImages.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '0.5rem', marginTop: '0.75rem' }}>
-                    {uploadedImages.map((img, index) => (
-                      <div key={index} style={{ position: 'relative' }}>
-                        <img src={img} alt={`Property ${index + 1}`} style={{ width: '100%', height: '60px', objectFit: 'cover', borderRadius: '6px' }} />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(index)}
-                          style={{
-                            position: 'absolute',
-                            top: '-6px',
-                            right: '-6px',
-                            background: '#ef4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '20px',
-                            height: '20px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                      <GripVertical className="w-3 h-3" />
+                      Drag images to reorder. First image is the cover photo.
+                    </p>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                      {uploadedImages.map((img, index) => (
+                        <div
+                          key={index}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, index)}
+                          onDragOver={(e) => handleDragOver(e, index)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, index)}
+                          onDragEnd={handleDragEnd}
+                          className={`relative group cursor-grab active:cursor-grabbing ${
+                            draggedIndex === index ? 'opacity-50 scale-95' : ''
+                          } ${
+                            dragOverIndex === index ? 'ring-2 ring-cyan-500 ring-offset-2' : ''
+                          } transition-all duration-150`}
                         >
-                          ×
-                        </button>
-                      </div>
-                    ))}
+                          {index === 0 && (
+                            <span className="absolute top-0 left-0 bg-cyan-500 text-white text-[10px] font-bold px-1 rounded-br-md z-10">
+                              Cover
+                            </span>
+                          )}
+                          <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <GripVertical className="w-4 h-4 text-white drop-shadow-lg" />
+                          </div>
+                          <img
+                            src={img}
+                            alt={`Preview ${index + 1}`}
+                            className="w-full h-16 object-cover rounded-lg border border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(index)}
+                            className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-md transition-colors"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Note Box */}
               <div style={{
-                background: '#fef3c7',
+                background: '#dbeafe',
                 padding: '1rem 1.25rem',
                 borderRadius: '12px',
-                border: '2px solid #fbbf24',
+                border: '2px solid #3b82f6',
                 marginBottom: '1.5rem'
               }}>
-                <p style={{ color: '#92400e', fontSize: '0.9rem', margin: 0 }}>
-                  💡 <strong>Note:</strong> This evaluation is based on property specifications and market data.
-                  For a more detailed valuation including photo analysis and condition assessment, create a full property listing with images.
+                <p style={{ color: '#1e40af', fontSize: '0.9rem', margin: 0 }}>
+                  💡 <strong>How it works:</strong> Your property will be created and you'll be redirected to the full evaluation page
+                  with comprehensive Homely comparable sales data, photo analysis, and market insights.
                 </p>
               </div>
 
@@ -640,7 +669,7 @@ export default function QuickEvaluationPage() {
                 }}
               >
                 <Sparkles size={20} />
-                {loading ? "Evaluating Property... (20-30s)" : "Get Property Valuation"}
+                {loading ? "Creating Property..." : "Get Property Valuation"}
               </button>
             </form>
           </div>

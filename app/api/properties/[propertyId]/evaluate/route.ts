@@ -138,7 +138,7 @@ function parseLocation(location: string): { suburb: string; state: string; postc
 
 /**
  * Scrape sold properties from Homely.com.au (no caching - returns fresh data)
- * Uses ScraperAPI proxy if SCRAPER_API_KEY is set (recommended for Vercel deployment)
+ * Uses ScraperAPI proxy if SCRAPER_API_KEY is set (recommended for cloud deployment)
  */
 async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<SoldProperty[]> {
   let targetUrl = postcode
@@ -149,7 +149,7 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
     targetUrl += `?propertytype=${propertyType}`;
   }
 
-  // Use ScraperAPI proxy if available (bypasses IP blocking on Vercel)
+  // Use ScraperAPI proxy if available (bypasses IP blocking on cloud hosts)
   const scraperApiKey = process.env.SCRAPER_API_KEY;
   let fetchUrl: string;
   let fetchOptions: RequestInit;
@@ -736,16 +736,35 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Build RP Data report section if available
     let rpDataSection = '';
-    if ((property as any).rp_data_report) {
-      rpDataSection = `\n\nRP DATA PROPERTY REPORT:\n${(property as any).rp_data_report}\n`;
-      console.log(`[Evaluate] Including RP Data report`);
+    const rpDataReportText = (property as any).rp_data_report;
+    if (rpDataReportText) {
+      rpDataSection = `
+
+═══════════════════════════════════════════════════════════════
+📊 RP DATA PROPERTY REPORT (USE THIS FOR VALUATION):
+═══════════════════════════════════════════════════════════════
+${rpDataReportText}
+═══════════════════════════════════════════════════════════════
+`;
+      console.log(`[Evaluate] Including RP Data report (${rpDataReportText.length} chars)`);
+      console.log(`[Evaluate] RP Data preview: ${rpDataReportText.substring(0, 200)}...`);
+    } else {
+      console.log(`[Evaluate] No RP Data report found on property`);
     }
 
     // Build Additional Report section if available
     let additionalReportSection = '';
-    if ((property as any).additional_report) {
-      additionalReportSection = `\n\nADDITIONAL PROPERTY REPORT:\n${(property as any).additional_report}\n`;
-      console.log(`[Evaluate] Including Additional report`);
+    const additionalReportText = (property as any).additional_report;
+    if (additionalReportText) {
+      additionalReportSection = `
+
+═══════════════════════════════════════════════════════════════
+📄 ADDITIONAL PROPERTY REPORT (USE THIS FOR VALUATION):
+═══════════════════════════════════════════════════════════════
+${additionalReportText}
+═══════════════════════════════════════════════════════════════
+`;
+      console.log(`[Evaluate] Including Additional report (${additionalReportText.length} chars)`);
     }
 
     // Build AI prompt
@@ -921,23 +940,41 @@ ${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${proper
     let valuationConstraints = '';
     if (usingReportsAsPrimary && (hasRpData || hasAdditionalReport)) {
       valuationConstraints = `
-⚠️⚠️⚠️ CRITICAL VALUATION CONSTRAINTS (RP DATA / ADDITIONAL REPORT MODE) ⚠️⚠️⚠️
+⚠️⚠️⚠️ CRITICAL: RP DATA REPORT MODE - USE RP DATA VALUES FOR VALUATION ⚠️⚠️⚠️
 
-**IMPORTANT: TWO SEPARATE PURPOSES FOR DATA**
+THE USER HAS SELECTED RP DATA AS THE PRIMARY VALUATION SOURCE.
 
-1. **FOR DISPLAY ONLY (Market Analysis section):** Include the Homely comparable sales data provided below.
-   List these properties with their addresses and sale prices for REFERENCE purposes only.
+**STEP 1: VERIFY THE RP DATA IS FOR THE CORRECT PROPERTY**
+The subject property is: ${property.location}
+Check that the RP Data Report address matches or is for the same property.
+- If YES (same property): Use the RP Data values as your PRIMARY valuation anchor
+- If NO (different property): State this mismatch and fall back to Homely comparable sales for valuation
 
-2. **FOR VALUATION (Valuation Assessment section):** Your valuation MUST be based on the RP Data Report
-   and/or Additional Report values - NOT the Homely comparable sales.
+**STEP 2: IF RP DATA MATCHES - EXTRACT THE VALUES**
+Look in the RP DATA PROPERTY REPORT section below for:
+- "ESTIMATED VALUE RANGE: $X - $Y" ← This is your PRIMARY valuation anchor
+- "Capital Value: $X" or "CV: $X"
+- "Land Value: $X" and "Improvements Value: $X"
+- Any valuation or estimated price range
 
-**VALUATION RULES:**
-- Extract any Capital Value (CV), Rateable Value (RV), Land Value, Estimated Value, or sale prices from the RP Data/Additional Reports
-- Use these report values as your PRIMARY anchor for the Valuation Assessment
-- The Homely comparable sales are for MARKET CONTEXT only - do NOT use them as the starting point for your valuation
-- In the Valuation Assessment, clearly state: "Based on RP Data Report values..." or "Based on Additional Report values..."
-- Time adjustments from report date: ~5% per year maximum
-- Quality/condition adjustments: -10% to +10% maximum
+**STEP 3: USE RP DATA VALUES FOR VALUATION**
+In your Valuation Assessment section, you MUST:
+- State: "Based on the RP Data Report estimated value of $X - $Y..."
+- Use the RP Data values as your starting point
+- Apply adjustments for time since report, market conditions, property condition
+- Your final valuation should be BASED ON the RP Data figures
+
+**STEP 4: DISPLAY HOMELY DATA FOR CONTEXT ONLY**
+- Include Homely sales in the Market Analysis section
+- These provide MARKET CONTEXT showing recent sales in the area
+- Do NOT use Homely sales as the valuation anchor when RP Data is selected
+- The Homely data helps validate/support the RP Data valuation
+
+**IN THE "RP Data & Additional Report Insights" SECTION:**
+- Quote the exact estimated value range from the report
+- Extract any Land Value, Improvements Value, Capital Value
+- Note the report date
+- Confirm whether the RP Data address matches the subject property
 
 ${rpDataPriorityInstruction}`;
     } else {
@@ -1004,9 +1041,19 @@ Detailed analysis of photos - build quality, condition, finishes, presentation.
 [COPY THE TEMPLATE ABOVE - LIST ALL ${topComparables.length} PROPERTIES WITH THEIR EXACT ADDRESSES]
 
 ## 4. RP Data & Additional Report Insights
-(if provided - extract key valuation data, land value, improvements value, previous sales)
+${hasRpData ? `**REQUIRED:** Extract and quote the following from the RP DATA PROPERTY REPORT provided above:
+- Estimated Value Range (e.g., "$1,450,000 - $1,580,000")
+- Land Value and Improvements Value if shown
+- Any Capital Value (CV) or Rateable Value (RV)
+- Previous sales history
 
-## 5. Valuation Assessment
+DO NOT say "No RP Data insights provided" - the report IS provided above with ═══ borders.` : '(No RP Data report was provided for this property)'}
+
+${hasRpData && usingReportsAsPrimary ? `## 5. Estimated Value Range
+Simply state the RP Data estimated value range. DO NOT do a separate valuation assessment with adjustments.
+Example: "Based on the RP Data Report, the estimated value range is $1,450,000 - $1,580,000"
+
+## 6. Key Factors Affecting Value` : `## 5. Valuation Assessment
 Explain step-by-step how you derived the value:
 - Start with the most relevant comparable sale price
 - Show each adjustment (land size, time, quality) with dollar amounts
@@ -1017,14 +1064,24 @@ Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
 Your estimate MUST be justified by the comparables - if the best match sold for $X, explain why you are valuing above/below $X.
 Remember: Maximum reasonable value is ${formatPrice(maxReasonableValue)} (highest comparable + 15%).
 
-## 7. Key Factors Affecting Value` : `## 2. Market Analysis
+## 7. Key Factors Affecting Value`}` : `## 2. Market Analysis
 **Comparable Sales Data:**
 [COPY THE TEMPLATE ABOVE - LIST ALL ${topComparables.length} PROPERTIES WITH THEIR EXACT ADDRESSES]
 
 ## 3. RP Data & Additional Report Insights
-(if provided - extract key valuation data, land value, improvements value, previous sales)
+${hasRpData ? `**REQUIRED:** Extract and quote the following from the RP DATA PROPERTY REPORT provided above:
+- Estimated Value Range (e.g., "$1,450,000 - $1,580,000")
+- Land Value and Improvements Value if shown
+- Any Capital Value (CV) or Rateable Value (RV)
+- Previous sales history
 
-## 4. Valuation Assessment
+DO NOT say "No RP Data insights provided" - the report IS provided above with ═══ borders.` : '(No RP Data report was provided for this property)'}
+
+${hasRpData && usingReportsAsPrimary ? `## 4. Estimated Value Range
+Simply state the RP Data estimated value range. DO NOT do a separate valuation assessment with adjustments.
+Example: "Based on the RP Data Report, the estimated value range is $1,450,000 - $1,580,000"
+
+## 5. Key Factors Affecting Value` : `## 4. Valuation Assessment
 Explain step-by-step how you derived the value:
 - Start with the most relevant comparable sale price
 - Show each adjustment (land size, time, quality) with dollar amounts
@@ -1035,7 +1092,7 @@ Provide specific $ figures BASED ON THE COMPARABLE SALES DATA.
 Your estimate MUST be justified by the comparables - if the best match sold for $X, explain why you are valuing above/below $X.
 Remember: Maximum reasonable value is highest comparable + 15%.
 
-## 6. Key Factors Affecting Value`}
+## 6. Key Factors Affecting Value`}`}
 
 ⚠️ CRITICAL REMINDER: Your Market Analysis section MUST include the EXACT addresses from the Historic Property Sales Data above. If you cannot find the data, state "Data unavailable" - NEVER invent addresses.`;
 

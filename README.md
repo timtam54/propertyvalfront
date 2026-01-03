@@ -5,7 +5,7 @@ A comprehensive real estate platform for property listing, AI-generated selling 
 ## 🎉 Setup Complete!
 
 ### ✅ What's Ready
-- **Backend**: Full FastAPI backend with MongoDB integration
+- **Backend**: Full FastAPI backend
 - **Frontend**: Next.js 16 with Tailwind CSS v4
 - **Components**: Custom components ready to use
 - **Utilities**: Image compression, PDF generation
@@ -53,7 +53,7 @@ cp .env.local.example .env.local
 # Backend
 cd backend
 cp .env.example .env
-# Add your MongoDB URL, OpenAI key, etc.
+# Add your OpenAI key, etc.
 ```
 
 ### 2. Start Backend
@@ -155,7 +155,6 @@ See `app/globals.css` for all available classes:
 
 ## 🔑 Required API Keys
 
-- **MongoDB** - Database (local or Atlas)
 - **OpenAI** - AI content generation
 - **Google Maps** - Address autocomplete
 - **Domain.com.au** - Property data
@@ -164,7 +163,7 @@ See `app/globals.css` for all available classes:
 ## 🛠️ Tech Stack
 
 ### Backend
-- FastAPI, MongoDB, OpenAI GPT-4, Stripe, Domain API
+- FastAPI, OpenAI GPT-4, Stripe, Domain API
 
 ### Frontend
 - Next.js 16, React 19, **Tailwind CSS v4**, Axios, jsPDF, Lucide Icons, Sonner (toasts)
@@ -220,9 +219,8 @@ Check `app/login/page.tsx` for a complete Next.js example with:
 
 ## 🚢 Deployment
 
-1. **Frontend**: Deploy to Vercel (automatic for Next.js)
-2. **Backend**: Deploy to Railway, Render, or AWS
-3. **Database**: Use MongoDB Atlas (cloud)
+1. **Frontend**: Deploy to Azure Static Web Apps (via GitHub Actions)
+2. **Backend**: Deploy to Azure App Service (via GitHub Actions)
 
 ## 📞 Support
 

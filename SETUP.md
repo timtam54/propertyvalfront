@@ -35,7 +35,6 @@ propertyval/
 
 ### Backend
 - **FastAPI** - Modern Python web framework
-- **MongoDB** - Database (requires running instance)
 - **OpenAI GPT-4** - AI content generation
 - **Stripe** - Payment processing
 - **Domain API, RBA API, ABS API** - Property data sources
@@ -67,7 +66,6 @@ cp .env.example .env
 ```
 
 Required API Keys:
-- **MongoDB**: Install and run MongoDB locally or use MongoDB Atlas
 - **OpenAI API Key**: Get from https://platform.openai.com/
 - **Google Maps API Key**: Get from https://console.cloud.google.com/
 - **Stripe Keys**: Get from https://dashboard.stripe.com/
@@ -152,21 +150,7 @@ export default function HomePage() {
 }
 ```
 
-### 3. Database Setup
-
-#### Install MongoDB
-- **macOS**: `brew install mongodb-community`
-- **Ubuntu**: Follow [MongoDB docs](https://docs.mongodb.com/manual/installation/)
-- **Windows**: Download from [MongoDB website](https://www.mongodb.com/try/download/community)
-
-#### Start MongoDB
-```bash
-mongod --dbpath /path/to/data/directory
-```
-
-Or use **MongoDB Atlas** (cloud hosted) for easier setup.
-
-### 4. Running the Application
+### 3. Running the Application
 
 #### Terminal 1 - Backend
 ```bash
@@ -266,11 +250,10 @@ This app was built using Emergent.sh, a platform for full-stack AI development. 
 3. ✅ Dependencies installed
 4. ⏳ Convert pages from React to Next.js (IN PROGRESS)
 5. ⏳ Set up environment variables
-6. ⏳ Start MongoDB
-7. ⏳ Test backend API endpoints
-8. ⏳ Test frontend pages
-9. ⏳ Configure Stripe webhooks
-10. ⏳ Deploy to production
+6. ⏳ Test backend API endpoints
+7. ⏳ Test frontend pages
+8. ⏳ Configure Stripe webhooks
+9. ⏳ Deploy to production
 
 ## Troubleshooting
 
@@ -279,9 +262,6 @@ If you encounter peer dependency warnings:
 ```bash
 npm install --legacy-peer-deps
 ```
-
-### MongoDB Connection Issues
-Check your `MONGODB_URL` in `backend/.env` matches your MongoDB instance.
 
 ### API Key Issues
 Ensure all required API keys are set in environment variables.
@@ -294,7 +274,6 @@ The backend is configured to allow requests from `http://localhost:3000`. Update
 - [Next.js Documentation](https://nextjs.org/docs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Shadcn UI Documentation](https://ui.shadcn.com/)
-- [MongoDB Documentation](https://docs.mongodb.com/)
 - [Stripe Documentation](https://stripe.com/docs)
 
 ## Support

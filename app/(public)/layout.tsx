@@ -1,19 +1,33 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'PropertyPitch - AI-Powered Property Valuation & Real Estate Analytics',
-  description: 'Get accurate property valuations powered by AI. PropertyPitch helps real estate agents and property investors with market analysis, comparable sales data, and professional property pitches.',
+  title: 'PropertyPitch - AI Property Valuation | Market Analysis & Facebook Marketing',
+  description: 'Professional property valuation platform with AI-powered market valuation, comparable sales data, and Facebook post generation for real estate marketing. Get accurate valuations and create engaging social media content for your property listings.',
   keywords: [
     'property valuation',
-    'real estate analytics',
+    'market valuation',
+    'property valuation Australia',
+    'real estate valuation',
     'AI property valuation',
+    'property market analysis',
+    'Facebook property posts',
+    'real estate Facebook marketing',
+    'property social media marketing',
+    'Facebook real estate ads',
+    'property listing posts',
     'comparable sales',
     'property investment',
     'real estate agent tools',
     'property pitch',
-    'market analysis',
-    'Australian property',
-    'real estate software'
+    'Australian property valuation',
+    'real estate software',
+    'property appraisal',
+    'house valuation',
+    'home valuation',
+    'property value estimate',
+    'real estate market analysis',
+    'property marketing',
+    'social media property marketing'
   ],
   authors: [{ name: 'PropertyPitch' }],
   creator: 'PropertyPitch',
@@ -34,25 +48,25 @@ export const metadata: Metadata = {
     locale: 'en_AU',
     url: 'https://propertyval-web.azurewebsites.net',
     siteName: 'PropertyPitch',
-    title: 'PropertyPitch - AI-Powered Property Valuation & Real Estate Analytics',
-    description: 'Get accurate property valuations powered by AI. Comprehensive market analysis, comparable sales data, and professional property pitches for real estate professionals.',
+    title: 'PropertyPitch - AI Property Valuation | Market Analysis & Facebook Marketing',
+    description: 'Professional property valuation with AI-powered market analysis. Generate accurate valuations and create engaging Facebook posts for your real estate listings. Trusted by Australian agents.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'PropertyPitch - AI Property Valuation Platform',
+        alt: 'PropertyPitch - AI Property Valuation & Facebook Marketing Platform',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PropertyPitch - AI-Powered Property Valuation',
-    description: 'Get accurate property valuations powered by AI. Market analysis & comparable sales for real estate professionals.',
+    title: 'PropertyPitch - AI Property Valuation & Market Analysis',
+    description: 'Get accurate property valuations powered by AI. Market valuation, comparable sales & Facebook marketing for real estate professionals.',
     images: ['/og-image.png'],
   },
   verification: {
-    google: 'your-google-verification-code', // Replace with actual verification code
+    google: 'googlecdf451f535300ddf',
   },
   alternates: {
     canonical: 'https://propertyval-web.azurewebsites.net',

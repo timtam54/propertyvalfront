@@ -14,12 +14,7 @@ import {
 import { API } from "@/lib/config";
 import ReportUploadModal from "@/components/ReportUploadModal";
 import PropertyTemplates from "@/components/PropertyTemplates";
-
-declare global {
-  interface Window {
-    google: typeof google;
-  }
-}
+import { useGoogleMaps } from "@/hooks/useGoogleMaps";
 
 interface MarketingPackage {
   id: string;
@@ -65,7 +60,7 @@ interface PropertyEditProps {
 export default function PropertyEdit({ property, userEmail, onSave, onClose, isOpen }: PropertyEditProps) {
   const isEditing = !!property?.id;
   const [loading, setLoading] = useState(false);
-  const [googleLoaded, setGoogleLoaded] = useState(false);
+  const { loaded: googleLoaded } = useGoogleMaps();
   const [formData, setFormData] = useState({
     beds: "",
     baths: "",
@@ -100,37 +95,6 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
 
   const locationInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-
-  // Poll for Google Maps to be loaded
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    let timeout: NodeJS.Timeout | null = null;
-
-    const checkGoogleMaps = () => {
-      if (typeof window !== 'undefined' && window.google?.maps?.places) {
-        setGoogleLoaded(true);
-        if (interval) clearInterval(interval);
-        if (timeout) clearTimeout(timeout);
-        return true;
-      }
-      return false;
-    };
-
-    if (checkGoogleMaps()) return;
-
-    interval = setInterval(() => {
-      checkGoogleMaps();
-    }, 100);
-
-    timeout = setTimeout(() => {
-      if (interval) clearInterval(interval);
-    }, 10000);
-
-    return () => {
-      if (interval) clearInterval(interval);
-      if (timeout) clearTimeout(timeout);
-    };
-  }, []);
 
   // Initialize Google Places Autocomplete
   useEffect(() => {

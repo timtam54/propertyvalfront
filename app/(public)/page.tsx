@@ -587,7 +587,8 @@ export default function HomePage() {
             <div className="flex items-center gap-2 text-gray-400">
               <Building className="w-5 h-5" />
               <span className="font-semibold">Ray White</span>
-            </div>
+            </div> 
+            
             <div className="flex items-center gap-2 text-gray-400">
               <Building className="w-5 h-5" />
               <span className="font-semibold">LJ Hooker</span>

@@ -831,8 +831,10 @@ ${hasAdditionalReport ? '📄 ADDITIONAL REPORT IS AVAILABLE - EXTRACT AND USE I
     const today = new Date();
     const subjectLandArea = property.size || 0;
 
+    // Only include Homely-based valuation anchor when NOT using reports as primary
+    // When RP Data is selected, the AI should use RP Data values, not Homely comparables
     let valuationAnchor = '';
-    if (exactMatches.length > 0 || bestMatch) {
+    if (!usingReportsAsPrimary && (exactMatches.length > 0 || bestMatch)) {
       const refProperty = exactMatches.length > 0 ? exactMatches[0] : bestMatch!;
       const refPrice = refProperty.price;
       const refLandArea = refProperty.land_area || 0;

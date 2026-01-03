@@ -152,6 +152,47 @@ export default function PropertyEvaluationPage() {
   // Image gallery state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // Test display for estimated value (for testing RP Data vs Homely extraction)
+  const [displayedEstimate, setDisplayedEstimate] = useState<string | null>(null);
+
+  // Helper function to extract RP Data estimate from rp_data_report
+  const extractRpDataEstimate = (): string => {
+    if (!property?.rp_data_report) return 'N/A';
+    const rangeMatch = property.rp_data_report.match(/Estimated\s*(?:Price\s*)?Range[:\s]*\$\s*([\d,]+)\s*[-–]\s*\$\s*([\d,]+)/i);
+    if (rangeMatch) return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
+    const valueMatch = property.rp_data_report.match(/Estimated\s*Value[:\s]*\$\s*([\d,]+)/i);
+    if (valueMatch) return `$${valueMatch[1]}`;
+    return 'N/A';
+  };
+
+  // Helper function to extract Homely estimate from valuation_history
+  const extractHomelyEstimate = (): string => {
+    if (!property?.valuation_history || property.valuation_history.length === 0) return 'N/A';
+    const latest = property.valuation_history[0];
+    if (latest?.value_low && latest?.value_high) {
+      return `$${latest.value_low.toLocaleString()} - $${latest.value_high.toLocaleString()}`;
+    }
+    return 'N/A';
+  };
+
+  // Save estimated value range to database
+  const saveEstimatedValueRange = async (value: string) => {
+    if (value === 'N/A') return;
+    setDisplayedEstimate(value);
+    try {
+      await fetch(`${API}/properties/${propertyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estimated_value_range: value }),
+      });
+      setProperty(prev => prev ? { ...prev, estimated_value_range: value } : null);
+      toast.success('Estimated value saved');
+    } catch (err) {
+      console.error('Failed to save estimated value:', err);
+      toast.error('Failed to save estimated value');
+    }
+  };
+
   // RP Data and Additional Report modal states
   const [showRpDataModal, setShowRpDataModal] = useState(false);
   const [uploadingRpData, setUploadingRpData] = useState(false);
@@ -213,37 +254,6 @@ export default function PropertyEvaluationPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Helper function to extract RP Data estimate from rp_data_report
-  const extractRpDataEstimate = (rpDataReport: string | null | undefined): string => {
-    if (!rpDataReport) return 'N/A';
-
-    // Try to match "Estimated Price Range: $X - $Y" or similar patterns
-    const rangeMatch = rpDataReport.match(/Estimated\s*(?:Price\s*)?Range[:\s]*\$\s*([\d,]+)\s*[-–]\s*\$\s*([\d,]+)/i);
-    if (rangeMatch) {
-      return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
-    }
-
-    // Fallback: try to match single "Estimated Value: $X"
-    const valueMatch = rpDataReport.match(/Estimated\s*Value[:\s]*\$\s*([\d,]+)/i);
-    if (valueMatch) {
-      return `$${valueMatch[1]}`;
-    }
-
-    return 'N/A';
-  };
-
-  // Helper function to extract Homely estimate from valuation_history
-  const extractHomelyEstimate = (valuationHistory: ValuationHistoryEntry[] | undefined): string => {
-    if (!valuationHistory || valuationHistory.length === 0) return 'N/A';
-
-    const latest = valuationHistory[0];
-    if (latest?.value_low && latest?.value_high) {
-      return `$${latest.value_low.toLocaleString()} - $${latest.value_high.toLocaleString()}`;
-    }
-
-    return 'N/A';
   };
 
   // Delete property handler
@@ -2023,61 +2033,66 @@ export default function PropertyEvaluationPage() {
                 )}
               </div>
 
-              {/* Estimated Value Range Display - Two boxes for RP Data and Homely */}
-              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                {/* RP Data Value */}
-                {property.rp_data_report && (
-                  <div
+              {/* Estimated Value Range Display */}
+              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* Yellow Value Box */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    padding: '1rem 1.5rem',
+                    borderRadius: '12px',
+                    border: '2px solid #f59e0b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    flex: '1',
+                    minWidth: '200px',
+                  }}
+                >
+                  <span style={{ fontSize: '2rem' }}>🎯</span>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Estimated Value Range
+                    </div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#78350f' }}>
+                      {displayedEstimate || property.estimated_value_range || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Test Buttons */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => saveEstimatedValueRange(extractRpDataEstimate())}
                     style={{
                       background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-                      padding: '1rem 1.5rem',
-                      borderRadius: '12px',
+                      color: '#1e3a8a',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
                       border: '2px solid #3b82f6',
-                      flex: '1',
-                      minWidth: '200px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '1rem',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: '600',
                     }}
                   >
-                    <span style={{ fontSize: '1.5rem' }}>📊</span>
-                    <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        RP Data Estimate
-                      </div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#1e3a8a' }}>
-                        {extractRpDataEstimate(property.rp_data_report)}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Homely Estimate */}
-                {property.valuation_history && property.valuation_history.length > 0 && (
-                  <div
+                    📊 RP Data
+                  </button>
+                  <button
+                    onClick={() => saveEstimatedValueRange(extractHomelyEstimate())}
                     style={{
                       background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                      padding: '1rem 1.5rem',
-                      borderRadius: '12px',
+                      color: '#78350f',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
                       border: '2px solid #f59e0b',
-                      flex: '1',
-                      minWidth: '200px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '1rem',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      fontWeight: '600',
                     }}
                   >
-                    <span style={{ fontSize: '1.5rem' }}>🏠</span>
-                    <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Homely Estimate
-                      </div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#78350f' }}>
-                        {extractHomelyEstimate(property.valuation_history)}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                    🏠 Homely
+                  </button>
+                </div>
               </div>
 
               {isEditingReport ? (

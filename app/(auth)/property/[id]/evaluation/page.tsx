@@ -2315,8 +2315,8 @@ export default function PropertyEvaluationPage() {
               )}
             </div>
 
-            {/* Apply to Listing Price Button */}
-            <div style={{ padding: '1rem 0' }}>
+            {/* Apply to Listing Price Button - MUST be above Social Media Marketing */}
+            <div style={{ padding: '1rem 0', marginTop: '1rem' }}>
               <button
                 onClick={applyValuationToListing}
                 style={{
@@ -2336,6 +2336,30 @@ export default function PropertyEvaluationPage() {
                 }}
               >
                 💲 Apply to Listing Price
+              </button>
+            </div>
+
+            {/* Apply Marketing Strategy Button */}
+            <div style={{ padding: '1rem 0' }}>
+              <button
+                onClick={openMarketingStrategyModal}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: 'white',
+                  padding: '1rem 2rem',
+                  borderRadius: '12px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '1.05rem',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  width: '100%',
+                  justifyContent: 'center',
+                }}
+              >
+                📈 Apply Marketing Strategy
               </button>
             </div>
 
@@ -2380,30 +2404,6 @@ export default function PropertyEvaluationPage() {
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* Apply Marketing Strategy Button */}
-            <div style={{ padding: '1rem 0' }}>
-              <button
-                onClick={openMarketingStrategyModal}
-                style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  padding: '1rem 2rem',
-                  borderRadius: '12px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '1.05rem',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  width: '100%',
-                  justifyContent: 'center',
-                }}
-              >
-                📈 Apply Marketing Strategy
-              </button>
             </div>
 
             {/* Generated Ad */}

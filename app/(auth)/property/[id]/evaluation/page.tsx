@@ -155,23 +155,54 @@ export default function PropertyEvaluationPage() {
   // Test display for estimated value (for testing RP Data vs Homely extraction)
   const [displayedEstimate, setDisplayedEstimate] = useState<string | null>(null);
 
-  // Helper function to extract RP Data estimate from rp_data_report
-  const extractRpDataEstimate = (): string => {
-    if (!property?.rp_data_report) return 'N/A';
-    const rangeMatch = property.rp_data_report.match(/Estimated\s*(?:Price\s*)?Range[:\s]*\$\s*([\d,]+)\s*[-–]\s*\$\s*([\d,]+)/i);
-    if (rangeMatch) return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
-    const valueMatch = property.rp_data_report.match(/Estimated\s*Value[:\s]*\$\s*([\d,]+)/i);
-    if (valueMatch) return `$${valueMatch[1]}`;
+  // Helper function to extract RP Data estimate
+  // Tries: 1) RP Data section of evaluation report, 2) raw rp_data_report
+  // Accepts optional reports for use after evaluation (before state updates)
+  const extractRpDataEstimate = (evalReportParam?: string, rpDataReportParam?: string): string => {
+    // First try the "RP Data & Additional Report Insights" section of evaluation report
+    const evalReport = evalReportParam || property?.evaluation_report;
+    if (evalReport) {
+      // Look in RP Data section for quoted values
+      const rpSection = evalReport.match(/RP Data.*?Insights[\s\S]*?(?=##|$)/i);
+      if (rpSection) {
+        const rangeMatch = rpSection[0].match(/\$\s*([\d,]+)\s*[-–to]+\s*\$\s*([\d,]+)/i);
+        if (rangeMatch) return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
+      }
+    }
+
+    // Fallback to raw rp_data_report
+    const rpReport = rpDataReportParam || property?.rp_data_report;
+    if (rpReport) {
+      // Pattern: "Estimated Price Range: $X - $Y" or similar
+      let match = rpReport.match(/Estimated\s*(?:Price\s*)?Range[:\s]*\$\s*([\d,]+)\s*[-–]\s*\$\s*([\d,]+)/i);
+      if (match) return `$${match[1]} - $${match[2]}`;
+
+      // Pattern: Any dollar range
+      match = rpReport.match(/\$\s*([\d,]+)\s*[-–]\s*\$\s*([\d,]+)/);
+      if (match) return `$${match[1]} - $${match[2]}`;
+    }
+
     return 'N/A';
   };
 
-  // Helper function to extract Homely estimate from valuation_history
-  const extractHomelyEstimate = (): string => {
-    if (!property?.valuation_history || property.valuation_history.length === 0) return 'N/A';
-    const latest = property.valuation_history[0];
-    if (latest?.value_low && latest?.value_high) {
-      return `$${latest.value_low.toLocaleString()} - $${latest.value_high.toLocaleString()}`;
+  // Helper function to extract Homely estimate from Section 5 "Estimated Value Range"
+  // Accepts optional report parameter for use after evaluation (before state updates)
+  const extractHomelyEstimate = (report?: string): string => {
+    const evalReport = report || property?.evaluation_report;
+    if (!evalReport) return 'N/A';
+
+    // Find Section 5 "Estimated Value Range" and extract the dollar range
+    const section5Match = evalReport.match(/##\s*5\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
+    if (section5Match) {
+      return `$${section5Match[1]} - $${section5Match[2]}`;
     }
+
+    // Fallback: look for "estimated value range" with dollar amounts anywhere
+    const rangeMatch = evalReport.match(/estimated value range[^$]*\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
+    if (rangeMatch) {
+      return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
+    }
+
     return 'N/A';
   };
 
@@ -626,14 +657,27 @@ export default function PropertyEvaluationPage() {
         setWarning(data.domain_api_error);
       }
 
-      // Calculate the new estimated value range from the valuation entry
+      // Calculate the new estimated value range based on selected source
       let newEstimatedValueRange: string | null = null;
-      if (data.valuation_history && data.valuation_history.length > 0) {
-        const latestValuation = data.valuation_history[0];
-        if (latestValuation.value_low && latestValuation.value_high) {
-          const formatPrice = (price: number) => '$' + price.toLocaleString();
-          newEstimatedValueRange = `${formatPrice(latestValuation.value_low)} - ${formatPrice(latestValuation.value_high)}`;
-        }
+
+      console.log('[Evaluation] Source selected:', source);
+      console.log('[Evaluation] valuation_history from API:', data.valuation_history);
+
+      if (source === 'homely') {
+        // Use the same function as the Homely button
+        newEstimatedValueRange = extractHomelyEstimate(data.evaluation_report);
+        console.log('[Evaluation] Homely range:', newEstimatedValueRange);
+      } else {
+        // Use the same function as the RP Data button
+        newEstimatedValueRange = extractRpDataEstimate(data.evaluation_report, property?.rp_data_report || undefined);
+        console.log('[Evaluation] RP Data range:', newEstimatedValueRange);
+      }
+
+      console.log('[Evaluation] Setting displayedEstimate to:', newEstimatedValueRange);
+
+      // Update the displayed estimate in yellow box
+      if (newEstimatedValueRange) {
+        setDisplayedEstimate(newEstimatedValueRange);
       }
 
       // Update local state immediately with evaluation results

@@ -1155,8 +1155,8 @@ Remember: Maximum reasonable value is highest comparable + 15%.
     let valuationBasis: string;
 
     // Try to extract the value range from the AI's response
-    // Look for patterns like "$1,100,000 to $1,150,000" or "$1,100,000 - $1,150,000"
-    const rangeMatch = evaluationReport.match(/estimated value range[^$]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
+    // Look for patterns like "$1,100,000 to $1,150,000" or "$1,100,000 - $1,150,000" or "$1,100,000 and $1,150,000"
+    const rangeMatch = evaluationReport.match(/estimated value range[^$]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–|and)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
 
     if (rangeMatch) {
       valueLow = parseInt(rangeMatch[1].replace(/,/g, ''));
@@ -1166,7 +1166,7 @@ Remember: Maximum reasonable value is highest comparable + 15%.
       console.log(`[Evaluate] Extracted AI range: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
     } else {
       // Fallback: Try to find any dollar range in the Estimated Value Range section
-      const sectionMatch = evaluationReport.match(/##\s*\d+\.\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
+      const sectionMatch = evaluationReport.match(/##\s*\d+\.\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–|and)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
 
       if (sectionMatch) {
         valueLow = parseInt(sectionMatch[1].replace(/,/g, ''));

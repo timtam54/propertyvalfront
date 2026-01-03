@@ -734,10 +734,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Build RP Data report section if available
+    // Build RP Data report section - ONLY if using reports as primary source
     let rpDataSection = '';
     const rpDataReportText = (property as any).rp_data_report;
-    if (rpDataReportText) {
+    if (rpDataReportText && evaluationSource === 'reports') {
       rpDataSection = `
 
 ═══════════════════════════════════════════════════════════════
@@ -748,14 +748,16 @@ ${rpDataReportText}
 `;
       console.log(`[Evaluate] Including RP Data report (${rpDataReportText.length} chars)`);
       console.log(`[Evaluate] RP Data preview: ${rpDataReportText.substring(0, 200)}...`);
+    } else if (rpDataReportText) {
+      console.log(`[Evaluate] RP Data report exists but NOT including (source: ${evaluationSource})`);
     } else {
       console.log(`[Evaluate] No RP Data report found on property`);
     }
 
-    // Build Additional Report section if available
+    // Build Additional Report section - ONLY if using reports as primary source
     let additionalReportSection = '';
     const additionalReportText = (property as any).additional_report;
-    if (additionalReportText) {
+    if (additionalReportText && evaluationSource === 'reports') {
       additionalReportSection = `
 
 ═══════════════════════════════════════════════════════════════
@@ -765,6 +767,8 @@ ${additionalReportText}
 ═══════════════════════════════════════════════════════════════
 `;
       console.log(`[Evaluate] Including Additional report (${additionalReportText.length} chars)`);
+    } else if (additionalReportText) {
+      console.log(`[Evaluate] Additional report exists but NOT including (source: ${evaluationSource})`);
     }
 
     // Build AI prompt

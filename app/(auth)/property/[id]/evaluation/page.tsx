@@ -585,6 +585,16 @@ export default function PropertyEvaluationPage() {
         setWarning(data.domain_api_error);
       }
 
+      // Calculate the new estimated value range from the valuation entry
+      let newEstimatedValueRange: string | null = null;
+      if (data.valuation_history && data.valuation_history.length > 0) {
+        const latestValuation = data.valuation_history[0];
+        if (latestValuation.value_low && latestValuation.value_high) {
+          const formatPrice = (price: number) => '$' + price.toLocaleString();
+          newEstimatedValueRange = `${formatPrice(latestValuation.value_low)} - ${formatPrice(latestValuation.value_high)}`;
+        }
+      }
+
       // Update local state immediately with evaluation results
       setProperty((prev) =>
         prev
@@ -598,6 +608,8 @@ export default function PropertyEvaluationPage() {
               suburb_trends: data.suburb_trends,
               selected_comparables: data.comparables_data?.comparable_sold?.map((c: any) => c.id) || [],
               evaluation_date: new Date().toISOString(),
+              // Update estimated_value_range to match the new valuation
+              estimated_value_range: newEstimatedValueRange || prev.estimated_value_range,
             }
           : null
       );

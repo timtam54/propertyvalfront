@@ -734,41 +734,42 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    // Build RP Data report section - ONLY if using reports as primary source
+    // Build RP Data report section - always include for display, but label differs based on source
     let rpDataSection = '';
     const rpDataReportText = (property as any).rp_data_report;
-    if (rpDataReportText && evaluationSource === 'reports') {
+    if (rpDataReportText) {
+      const rpDataLabel = evaluationSource === 'reports'
+        ? '📊 RP DATA PROPERTY REPORT (USE THIS FOR VALUATION):'
+        : '📊 RP DATA PROPERTY REPORT (FOR REFERENCE ONLY - DO NOT USE FOR VALUATION):';
       rpDataSection = `
 
 ═══════════════════════════════════════════════════════════════
-📊 RP DATA PROPERTY REPORT (USE THIS FOR VALUATION):
+${rpDataLabel}
 ═══════════════════════════════════════════════════════════════
 ${rpDataReportText}
 ═══════════════════════════════════════════════════════════════
 `;
-      console.log(`[Evaluate] Including RP Data report (${rpDataReportText.length} chars)`);
-      console.log(`[Evaluate] RP Data preview: ${rpDataReportText.substring(0, 200)}...`);
-    } else if (rpDataReportText) {
-      console.log(`[Evaluate] RP Data report exists but NOT including (source: ${evaluationSource})`);
+      console.log(`[Evaluate] Including RP Data report (${rpDataReportText.length} chars) - source: ${evaluationSource}`);
     } else {
       console.log(`[Evaluate] No RP Data report found on property`);
     }
 
-    // Build Additional Report section - ONLY if using reports as primary source
+    // Build Additional Report section - always include for display
     let additionalReportSection = '';
     const additionalReportText = (property as any).additional_report;
-    if (additionalReportText && evaluationSource === 'reports') {
+    if (additionalReportText) {
+      const additionalLabel = evaluationSource === 'reports'
+        ? '📄 ADDITIONAL PROPERTY REPORT (USE THIS FOR VALUATION):'
+        : '📄 ADDITIONAL PROPERTY REPORT (FOR REFERENCE ONLY - DO NOT USE FOR VALUATION):';
       additionalReportSection = `
 
 ═══════════════════════════════════════════════════════════════
-📄 ADDITIONAL PROPERTY REPORT (USE THIS FOR VALUATION):
+${additionalLabel}
 ═══════════════════════════════════════════════════════════════
 ${additionalReportText}
 ═══════════════════════════════════════════════════════════════
 `;
-      console.log(`[Evaluate] Including Additional report (${additionalReportText.length} chars)`);
-    } else if (additionalReportText) {
-      console.log(`[Evaluate] Additional report exists but NOT including (source: ${evaluationSource})`);
+      console.log(`[Evaluate] Including Additional report (${additionalReportText.length} chars) - source: ${evaluationSource}`);
     }
 
     // Build AI prompt
@@ -1045,17 +1046,18 @@ Detailed analysis of photos - build quality, condition, finishes, presentation.
 [COPY THE TEMPLATE ABOVE - LIST ALL ${topComparables.length} PROPERTIES WITH THEIR EXACT ADDRESSES]
 
 ## 4. RP Data & Additional Report Insights
-${hasRpData ? `**REQUIRED:** Extract and quote the following from the RP DATA PROPERTY REPORT provided above:
-- Estimated Value Range (e.g., "$1,450,000 - $1,580,000")
+${hasRpData ? `**REQUIRED:** Extract and quote the EXACT values from the RP DATA PROPERTY REPORT provided above:
+- Find "Estimated Value:" and "Estimated Price Range:" - copy the EXACT dollar amounts shown
 - Land Value and Improvements Value if shown
 - Any Capital Value (CV) or Rateable Value (RV)
 - Previous sales history
 
+⚠️ DO NOT make up values. DO NOT use placeholder examples. Copy the REAL numbers from the report.
 DO NOT say "No RP Data insights provided" - the report IS provided above with ═══ borders.` : '(No RP Data report was provided for this property)'}
 
 ${hasRpData && usingReportsAsPrimary ? `## 5. Estimated Value Range
-Simply state the RP Data estimated value range. DO NOT do a separate valuation assessment with adjustments.
-Example: "Based on the RP Data Report, the estimated value range is $1,450,000 - $1,580,000"
+State the EXACT RP Data estimated value range from the report. Copy the real numbers, not examples.
+Look for "Estimated Value:" or "Estimated Price Range:" in the report and use those exact figures.
 
 ## 6. Key Factors Affecting Value` : `## 5. Valuation Assessment
 Explain step-by-step how you derived the value:
@@ -1073,17 +1075,18 @@ Remember: Maximum reasonable value is ${formatPrice(maxReasonableValue)} (highes
 [COPY THE TEMPLATE ABOVE - LIST ALL ${topComparables.length} PROPERTIES WITH THEIR EXACT ADDRESSES]
 
 ## 3. RP Data & Additional Report Insights
-${hasRpData ? `**REQUIRED:** Extract and quote the following from the RP DATA PROPERTY REPORT provided above:
-- Estimated Value Range (e.g., "$1,450,000 - $1,580,000")
+${hasRpData ? `**REQUIRED:** Extract and quote the EXACT values from the RP DATA PROPERTY REPORT provided above:
+- Find "Estimated Value:" and "Estimated Price Range:" - copy the EXACT dollar amounts shown
 - Land Value and Improvements Value if shown
 - Any Capital Value (CV) or Rateable Value (RV)
 - Previous sales history
 
+⚠️ DO NOT make up values. DO NOT use placeholder examples. Copy the REAL numbers from the report.
 DO NOT say "No RP Data insights provided" - the report IS provided above with ═══ borders.` : '(No RP Data report was provided for this property)'}
 
 ${hasRpData && usingReportsAsPrimary ? `## 4. Estimated Value Range
-Simply state the RP Data estimated value range. DO NOT do a separate valuation assessment with adjustments.
-Example: "Based on the RP Data Report, the estimated value range is $1,450,000 - $1,580,000"
+State the EXACT RP Data estimated value range from the report. Copy the real numbers, not examples.
+Look for "Estimated Value:" or "Estimated Price Range:" in the report and use those exact figures.
 
 ## 5. Key Factors Affecting Value` : `## 4. Valuation Assessment
 Explain step-by-step how you derived the value:

@@ -1122,57 +1122,43 @@ export default function PropertyEvaluationPage() {
 
     setMarketingStrategyText(marketingStrategy);
 
-    // Extract pricing options from report
+    // Extract pricing options - USE property.estimated_value_range or property.price, NOT RP Data
     const options: PricingOption[] = [];
 
-    // Look for "Offers Over" recommendations
-    const offersOverMatch = reportText.match(/(?:recommend|suggest|use)[\s\S]*?["']?Offers\s*Over\s*\$?\s*([\d,]+)/i);
-    if (offersOverMatch) {
-      const price = parseInt(offersOverMatch[1].replace(/,/g, ''));
-      if (price >= 100000 && price <= 50000000) {
-        options.push({
-          type: 'offers_over',
-          label: 'Offers Over',
-          displayPrice: `Offers Over $${price.toLocaleString()}`,
-          price: price,
-          description: 'Creates urgency and competitive bidding'
-        });
+    // First priority: Use property.estimated_value_range (the yellow box value)
+    if (property.estimated_value_range) {
+      const rangeMatch = property.estimated_value_range.match(/\$?\s*([\d,]+)\s*[-–]\s*\$?\s*([\d,]+)/);
+      if (rangeMatch) {
+        const lower = parseInt(rangeMatch[1].replace(/,/g, ''));
+        const upper = parseInt(rangeMatch[2].replace(/,/g, ''));
+        if (lower >= 100000 && upper <= 50000000) {
+          options.push({
+            type: 'price_guide',
+            label: 'Price Guide',
+            displayPrice: `$${lower.toLocaleString()} - $${upper.toLocaleString()}`,
+            price: lower,
+            priceUpper: upper,
+            description: 'Based on estimated value range'
+          });
+          options.push({
+            type: 'offers_over',
+            label: 'Offers Over',
+            displayPrice: `Offers Over $${lower.toLocaleString()}`,
+            price: lower,
+            description: 'Creates urgency and competitive bidding'
+          });
+          options.push({
+            type: 'fixed',
+            label: 'Fixed Price',
+            displayPrice: `$${Math.round((lower + upper) / 2).toLocaleString()}`,
+            price: Math.round((lower + upper) / 2),
+            description: 'Clear, transparent pricing (midpoint)'
+          });
+        }
       }
     }
 
-    // Look for "Fixed Price" recommendations
-    const fixedPriceMatch = reportText.match(/(?:fixed\s*price|list\s*at|asking\s*price)[\s\S]*?\$?\s*([\d,]+)/i);
-    if (fixedPriceMatch) {
-      const price = parseInt(fixedPriceMatch[1].replace(/,/g, ''));
-      if (price >= 100000 && price <= 50000000) {
-        options.push({
-          type: 'fixed',
-          label: 'Fixed Price',
-          displayPrice: `$${price.toLocaleString()}`,
-          price: price,
-          description: 'Clear, transparent pricing'
-        });
-      }
-    }
-
-    // Look for "Price Guide" or range
-    const priceGuideMatch = reportText.match(/(?:price\s*guide|range)[\s\S]*?\$?\s*([\d,]+)\s*[-–]\s*\$?\s*([\d,]+)/i);
-    if (priceGuideMatch) {
-      const lower = parseInt(priceGuideMatch[1].replace(/,/g, ''));
-      const upper = parseInt(priceGuideMatch[2].replace(/,/g, ''));
-      if (lower >= 100000 && upper <= 50000000) {
-        options.push({
-          type: 'price_guide',
-          label: 'Price Guide',
-          displayPrice: `$${lower.toLocaleString()} - $${upper.toLocaleString()}`,
-          price: lower,
-          priceUpper: upper,
-          description: 'Flexible range for negotiations'
-        });
-      }
-    }
-
-    // Add fallback options if no specific recommendations found
+    // Second priority: Use property.price if no estimated_value_range
     if (options.length === 0 && property.price) {
       options.push(
         {

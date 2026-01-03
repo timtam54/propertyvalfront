@@ -1148,36 +1148,60 @@ Remember: Maximum reasonable value is highest comparable + 15%.
     // Calculate confidence scoring
     const confidenceScoring = calculateConfidenceScoring(comparables, property);
 
-    // Prepare valuation history entry
-    // PRIORITY: Use exact matches average > best match price > weighted average
+    // Extract the AI's estimated value range from the report (Section 6 or "Estimated Value Range")
     let estimatedValue: number;
+    let valueLow: number;
+    let valueHigh: number;
     let valuationBasis: string;
 
-    if (exactMatches.length > 0) {
-      // Best case: we have exact bed/bath matches - use their average
-      const exactPrices = exactMatches.map(e => e.price);
-      estimatedValue = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
-      valuationBasis = `Average of ${exactMatches.length} exact ${property.beds}bed/${property.baths}bath matches`;
-      console.log(`[Evaluate] Using EXACT MATCH average: $${estimatedValue} from ${exactMatches.length} properties`);
-    } else if (bestMatch) {
-      // Next best: use the closest match price
-      estimatedValue = bestMatch.price;
-      valuationBasis = `Best match: ${bestMatch.beds}bed/${bestMatch.baths}bath at ${bestMatch.address}`;
-      console.log(`[Evaluate] Using BEST MATCH price: $${estimatedValue} (${bestMatch.similarity_score}% similar)`);
+    // Try to extract the value range from the AI's response
+    // Look for patterns like "$1,100,000 to $1,150,000" or "$1,100,000 - $1,150,000"
+    const rangeMatch = evaluationReport.match(/estimated value range[^$]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
+
+    if (rangeMatch) {
+      valueLow = parseInt(rangeMatch[1].replace(/,/g, ''));
+      valueHigh = parseInt(rangeMatch[2].replace(/,/g, ''));
+      estimatedValue = Math.round((valueLow + valueHigh) / 2);
+      valuationBasis = 'AI valuation with adjustments';
+      console.log(`[Evaluate] Extracted AI range: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
     } else {
-      // Fallback to weighted average
-      estimatedValue = stats.weightedAvg || stats.median || stats.avg || 0;
-      valuationBasis = 'Weighted average of available comparables';
-      console.log(`[Evaluate] Using WEIGHTED AVERAGE: $${estimatedValue}`);
+      // Fallback: Try to find any dollar range in the Estimated Value Range section
+      const sectionMatch = evaluationReport.match(/##\s*\d+\.\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
+
+      if (sectionMatch) {
+        valueLow = parseInt(sectionMatch[1].replace(/,/g, ''));
+        valueHigh = parseInt(sectionMatch[2].replace(/,/g, ''));
+        estimatedValue = Math.round((valueLow + valueHigh) / 2);
+        valuationBasis = 'AI valuation with adjustments';
+        console.log(`[Evaluate] Extracted from section: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
+      } else {
+        // Final fallback: use comparable-based calculation
+        if (exactMatches.length > 0) {
+          const exactPrices = exactMatches.map(e => e.price);
+          estimatedValue = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+          valuationBasis = `Average of ${exactMatches.length} exact ${property.beds}bed/${property.baths}bath matches`;
+          console.log(`[Evaluate] Fallback to EXACT MATCH average: $${estimatedValue}`);
+        } else if (bestMatch) {
+          estimatedValue = bestMatch.price;
+          valuationBasis = `Best match: ${bestMatch.beds}bed/${bestMatch.baths}bath at ${bestMatch.address}`;
+          console.log(`[Evaluate] Fallback to BEST MATCH price: $${estimatedValue}`);
+        } else {
+          estimatedValue = stats.weightedAvg || stats.median || stats.avg || 0;
+          valuationBasis = 'Weighted average of available comparables';
+          console.log(`[Evaluate] Fallback to WEIGHTED AVERAGE: $${estimatedValue}`);
+        }
+        const valueRange = estimatedValue * 0.1;
+        valueLow = Math.round(estimatedValue - valueRange);
+        valueHigh = Math.round(estimatedValue + valueRange);
+      }
     }
 
-    const valueRange = estimatedValue * 0.1;
-    console.log(`[Evaluate] Final valuation: $${estimatedValue} (${valuationBasis})`);
+    console.log(`[Evaluate] Final valuation: $${valueLow} - $${valueHigh} (${valuationBasis})`);
     const valuationEntry: ValuationHistoryEntry = {
       date: new Date().toISOString(),
       estimated_value: estimatedValue,
-      value_low: Math.round(estimatedValue - valueRange),
-      value_high: Math.round(estimatedValue + valueRange),
+      value_low: valueLow,
+      value_high: valueHigh,
       confidence_score: confidenceScoring.overall_score,
       confidence_level: confidenceScoring.level,
       data_source: dataSource,

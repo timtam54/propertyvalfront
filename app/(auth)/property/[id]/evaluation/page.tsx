@@ -624,7 +624,11 @@ export default function PropertyEvaluationPage() {
           });
           if (freshResponse.ok) {
             const freshData = await freshResponse.json();
-            setProperty(freshData);
+            // Preserve the new estimated_value_range we calculated, don't let database overwrite it
+            setProperty(prev => ({
+              ...freshData,
+              estimated_value_range: newEstimatedValueRange || freshData.estimated_value_range,
+            }));
             console.log('Re-fetched property after evaluation, evaluation_date:', freshData.evaluation_date);
           }
         } catch (e) {

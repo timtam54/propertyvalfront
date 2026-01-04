@@ -140,6 +140,9 @@ export default function PropertyEvaluationPage() {
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [evaluationSource, setEvaluationSource] = useState<'homely' | 'reports' | null>(null);
 
+  // OpenAI Expired Dialog state
+  const [showOpenAIExpiredDialog, setShowOpenAIExpiredDialog] = useState(false);
+
   // Header functionality state
   const [deleting, setDeleting] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -647,9 +650,11 @@ export default function PropertyEvaluationPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        // Check for OpenAI quota expired
+        // Check for OpenAI quota expired - show dialog instead of throwing
         if (errorData.error_code === 'OPENAI_QUOTA_EXCEEDED' || errorData.detail === 'OpenAI Expired') {
-          throw new Error('⚠️ OpenAI Expired - Please top up your OpenAI account credits');
+          setShowOpenAIExpiredDialog(true);
+          setEvaluating(false);
+          return; // Don't throw - just show dialog and return
         }
         throw new Error(errorData.detail || 'Failed to evaluate property');
       }
@@ -1278,6 +1283,65 @@ export default function PropertyEvaluationPage() {
         rpDataHasEstimates={hasNumericalEstimates(property?.rp_data_report)}
         additionalReportHasEstimates={hasNumericalEstimates(property?.additional_report)}
       />
+
+      {/* OpenAI Expired Dialog */}
+      {showOpenAIExpiredDialog && (
+        <>
+          <div
+            onClick={() => setShowOpenAIExpiredDialog(false)}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.6)',
+              zIndex: 9999,
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'white',
+              borderRadius: '16px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              zIndex: 10000,
+              maxWidth: '450px',
+              width: '90%',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ padding: '32px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '24px', color: '#dc2626', fontWeight: '700' }}>
+                OpenAI Expired
+              </h3>
+              <p style={{ color: '#4b5563', margin: '0 0 24px 0', fontSize: '16px', lineHeight: '1.5' }}>
+                Your OpenAI API quota has been exceeded.<br />
+                Please top up your OpenAI account credits to continue using AI evaluations.
+              </p>
+              <button
+                onClick={() => setShowOpenAIExpiredDialog(false)}
+                style={{
+                  background: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px 32px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Marketing Strategy Modal */}
       {showMarketingModal && (

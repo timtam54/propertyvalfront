@@ -1153,21 +1153,35 @@ Remember: Maximum reasonable value is highest comparable + 15%.
       console.log(`[Evaluate] No images available for visual analysis`);
     }
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: userContent
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 3500 // Increased for visual analysis content
-    });
+    let completion;
+    try {
+      completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userContent
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 3500 // Increased for visual analysis content
+      });
+    } catch (openaiError: any) {
+      // Check for quota/billing errors
+      if (openaiError?.status === 429 || openaiError?.code === 'insufficient_quota') {
+        console.error('[Evaluate] OpenAI quota exceeded:', openaiError.message);
+        return NextResponse.json(
+          { detail: 'OpenAI Expired', error_code: 'OPENAI_QUOTA_EXCEEDED' },
+          { status: 402 }
+        );
+      }
+      // Re-throw other errors
+      throw openaiError;
+    }
 
     const evaluationReport = completion.choices[0]?.message?.content || 'Unable to generate evaluation.';
 

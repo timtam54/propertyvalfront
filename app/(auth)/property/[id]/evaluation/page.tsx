@@ -647,6 +647,10 @@ export default function PropertyEvaluationPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Check for OpenAI quota expired
+        if (errorData.error_code === 'OPENAI_QUOTA_EXCEEDED' || errorData.detail === 'OpenAI Expired') {
+          throw new Error('⚠️ OpenAI Expired - Please top up your OpenAI account credits');
+        }
         throw new Error(errorData.detail || 'Failed to evaluate property');
       }
 

@@ -574,7 +574,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const evaluationSource = requestBody.evaluationSource || 'homely';
-    console.log(`[Evaluate] Evaluation source: ${evaluationSource}`);
+    console.log(`[Evaluate] ====================================`);
+    console.log(`[Evaluate] Evaluation source RECEIVED: ${evaluationSource}`);
+    console.log(`[Evaluate] ====================================`);
 
     let soldProperties: SoldProperty[] = [];
 
@@ -704,7 +706,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         comparablesText += `SOLD PRICE: ${formatPrice(bestMatch.price)}\n`;
         comparablesText += `Sold Date: ${bestMatch.sold_date}\n`;
         comparablesText += `Similarity Score: ${bestMatch.similarity_score}%\n`;
-        comparablesText += `\n⚠️ YOUR VALUATION SHOULD BE BASED PRIMARILY ON THIS PROPERTY'S SALE PRICE OF ${formatPrice(bestMatch.price)}\n`;
+        // Only include directive to use Homely sale price when NOT using RP Data as primary
+        if (evaluationSource !== 'reports') {
+          comparablesText += `\n⚠️ YOUR VALUATION SHOULD BE BASED PRIMARILY ON THIS PROPERTY'S SALE PRICE OF ${formatPrice(bestMatch.price)}\n`;
+        } else {
+          comparablesText += `\n(This comparable sale is provided for MARKET CONTEXT - use RP Data values for valuation)\n`;
+        }
       }
 
       // Show exact matches if we have them
@@ -730,7 +737,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (exactMatches.length > 0) {
         const exactPrices = exactMatches.map(e => e.price);
         const exactAvg = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
-        comparablesText += `- Exact Match Average: ${formatPrice(exactAvg)} ⬅️ USE THIS\n`;
+        // Only include directive to use Homely exact match average when NOT using RP Data as primary
+        if (evaluationSource !== 'reports') {
+          comparablesText += `- Exact Match Average: ${formatPrice(exactAvg)} ⬅️ USE THIS\n`;
+        } else {
+          comparablesText += `- Exact Match Average: ${formatPrice(exactAvg)} (for market context)\n`;
+        }
       }
     }
 
@@ -787,6 +799,15 @@ ${comparablesText}${rpDataSection}${additionalReportSection}`;
     const hasAdditionalReport = !!(property as any).additional_report;
     const hasComparables = comparables.length > 0;
     const usingReportsAsPrimary = evaluationSource === 'reports';
+
+    console.log(`[Evaluate] ====================================`);
+    console.log(`[Evaluate] KEY DECISION VARIABLES:`);
+    console.log(`[Evaluate] - evaluationSource: ${evaluationSource}`);
+    console.log(`[Evaluate] - usingReportsAsPrimary: ${usingReportsAsPrimary}`);
+    console.log(`[Evaluate] - hasRpData: ${hasRpData}`);
+    console.log(`[Evaluate] - hasAdditionalReport: ${hasAdditionalReport}`);
+    console.log(`[Evaluate] - hasComparables: ${hasComparables}`);
+    console.log(`[Evaluate] ====================================`);
 
     let dataSourcesNote = '';
     if (hasRpData || hasAdditionalReport || hasComparables) {
@@ -945,7 +966,9 @@ ${exactMatches.length > 0 ? `- Exact Match Average (${property.beds}bed/${proper
 
     // Build the valuation constraints section based on data source
     let valuationConstraints = '';
+    console.log(`[Evaluate] Building valuationConstraints: usingReportsAsPrimary=${usingReportsAsPrimary}, hasRpData=${hasRpData}, hasAdditionalReport=${hasAdditionalReport}`);
     if (usingReportsAsPrimary && (hasRpData || hasAdditionalReport)) {
+      console.log(`[Evaluate] ===> USING RP DATA CONSTRAINTS (report mode)`);
       valuationConstraints = `
 ⚠️⚠️⚠️ CRITICAL: RP DATA REPORT MODE - USE RP DATA VALUES FOR VALUATION ⚠️⚠️⚠️
 
@@ -985,6 +1008,7 @@ In your Valuation Assessment section, you MUST:
 
 ${rpDataPriorityInstruction}`;
     } else {
+      console.log(`[Evaluate] ===> USING HOMELY CONSTRAINTS (comparable mode)`);
       valuationConstraints = `
 ⚠️⚠️⚠️ CRITICAL VALUATION CONSTRAINTS ⚠️⚠️⚠️
 1. Your valuation MUST be grounded in the comparable sales data provided

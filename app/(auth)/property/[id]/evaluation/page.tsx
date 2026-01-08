@@ -2438,7 +2438,7 @@ export default function PropertyEvaluationPage() {
                 marginTop: '2rem',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <h3 style={{ fontSize: '1.5rem', fontWeight: '700', margin: 0, color: '#0c4a6e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   ✨ AI Selling Pitch
                 </h3>

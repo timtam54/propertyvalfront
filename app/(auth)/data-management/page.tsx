@@ -230,7 +230,7 @@ export default function DataManagement() {
               Property Data
             </h1>
             <p style={{ color: "rgba(255, 255, 255, 0.9)", fontSize: "0.85rem", margin: "0.25rem 0 0 0" }}>
-              Import data, browse, analyze trends
+              Import data, browse, analyse trends
             </p>
           </div>
         </div>

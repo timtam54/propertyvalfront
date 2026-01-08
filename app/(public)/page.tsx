@@ -5,41 +5,105 @@ import { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
 import Link from 'next/link';
 import { Home, TrendingUp, FileText, Check, X, ArrowRight, BarChart3, Shield, Zap, Star, Quote, MapPin, Building, Users, Clock, LogIn, Menu, Info } from 'lucide-react';
+import { API } from '@/lib/config';
+
+// Track page view for public pages (no auth required)
+async function trackPublicPageView(page: string) {
+  try {
+    // Get IP address
+    let ipaddress = 'unknown';
+    try {
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipResponse.json();
+      ipaddress = ipData.ip || 'unknown';
+    } catch {
+      // Fail silently
+    }
+
+    await fetch(`${API}/audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ipaddress,
+        id: 0,
+        action: 'view',
+        page,
+        username: 'anonymous',
+        dte: new Date().toISOString(),
+        propertyid: 0
+      })
+    });
+  } catch {
+    // Fail silently - audit logging should never break the page
+  }
+}
 
 // JSON-LD structured data for SEO
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: 'PropertyPitch',
+  name: 'PropertyEval - Fast Property Valuations Australia',
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web, iOS, Android',
-  description: 'AI-powered property valuation and market valuation platform with Facebook post generation for real estate marketing. Get accurate property valuations, comparable sales analysis, and create engaging social media content for property listings.',
+  description: 'Fast, accurate and affordable property valuations in Australia. Generate professional valuation reports instantly with historic sales prices, comparable sales data and AI-powered market analysis. Get cheap property valuations trusted by real estate agents.',
   offers: {
     '@type': 'Offer',
-    price: '0',
+    price: '29',
     priceCurrency: 'AUD',
+    priceValidUntil: '2027-12-31',
+    availability: 'https://schema.org/InStock',
   },
   aggregateRating: {
     '@type': 'AggregateRating',
     ratingValue: '4.8',
-    ratingCount: '150',
+    ratingCount: '500',
+    bestRating: '5',
+    worstRating: '1',
   },
   provider: {
     '@type': 'Organization',
-    name: 'PropertyPitch',
+    name: 'PropertyEval',
     url: 'https://propertyeval.com.au',
+    logo: 'https://propertyeval.com.au/og-image.png',
+    sameAs: [],
+    address: {
+      '@type': 'PostalAddress',
+      addressCountry: 'AU',
+    },
   },
   featureList: [
-    'AI-Powered Property Valuation',
-    'Market Valuation Analysis',
+    'Fast Property Valuations',
+    'Cheap Valuation Reports',
+    'Accurate Property Appraisals',
+    'Historic Sales Prices',
     'Comparable Sales Data',
-    'Facebook Post Generation',
-    'Social Media Marketing Tools',
+    'Instant Valuation Report Generation',
+    'AI-Powered Market Analysis',
     'Professional PDF Reports',
-    'Real Estate Market Analysis',
-    'Property Investment Analytics'
+    'Suburb Sales History',
+    'Real Estate Agent Tools'
   ],
-  keywords: 'property valuation, market valuation, Facebook property posts, real estate marketing, AI valuation, property appraisal, house valuation, real estate Facebook marketing'
+  keywords: 'fast property valuations, cheap property valuations, accurate property valuations, property valuation report, valuation report generation, historic sales prices, property valuation Australia, house valuation, home valuation, comparable sales, property appraisal'
+};
+
+// Additional JSON-LD for local business SEO
+const localBusinessJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'ProfessionalService',
+  name: 'PropertyEval Property Valuations',
+  description: 'Fast, cheap and accurate property valuations with instant report generation. Access historic sales prices and comparable sales data across Australia.',
+  url: 'https://propertyeval.com.au',
+  priceRange: '$$',
+  areaServed: {
+    '@type': 'Country',
+    name: 'Australia',
+  },
+  serviceType: [
+    'Property Valuation',
+    'Real Estate Appraisal',
+    'Market Analysis',
+    'Valuation Report Generation'
+  ],
 };
 
 // Animated Counter Component
@@ -88,7 +152,7 @@ const testimonials = [
     role: "Senior Real Estate Agent",
     company: "Ray White Brisbane",
     image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=face",
-    quote: "PropertyPitch has completely transformed how I prepare valuations. What used to take hours now takes minutes, and my clients are impressed with the professional reports.",
+    quote: "PropertyEval has completely transformed how I prepare valuations. What used to take hours now takes minutes, and my clients are impressed with the professional reports.",
     rating: 5
   },
   {
@@ -153,6 +217,15 @@ export default function HomePage() {
   const router = useRouter();
   const [currentShowcase, setCurrentShowcase] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const hasTrackedRef = useRef(false);
+
+  // Track page view on mount
+  useEffect(() => {
+    if (!hasTrackedRef.current) {
+      hasTrackedRef.current = true;
+      trackPublicPageView('home');
+    }
+  }, []);
 
   // Auto-rotate showcase
   useEffect(() => {
@@ -163,21 +236,26 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 dark:from-gray-900 dark:to-gray-800">
       {/* JSON-LD Structured Data for SEO */}
       <Script
         id="json-ld"
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <Script
+        id="local-business-json-ld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd) }}
+      />
 
       {/* Header */}
-      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-blue-700 to-blue-900 dark:from-gray-800 dark:to-gray-900 border-b border-blue-800 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Home className="w-8 h-8 text-white dark:text-cyan-500" />
-            <span className="text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <Home className="w-10 h-10 text-white" />
+            <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
+          </Link>
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/" className="text-white font-medium">
@@ -188,7 +266,7 @@ export default function HomePage() {
             </Link>
             <button
               onClick={() => router.push('/login')}
-              className="flex items-center gap-2 px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 px-5 py-2 bg-white text-blue-700 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
             >
               <LogIn className="w-4 h-4" />
               Sign In
@@ -204,14 +282,14 @@ export default function HomePage() {
         </div>
         {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-cyan-700 dark:bg-gray-800 border-t border-cyan-600 dark:border-gray-700">
+          <div className="md:hidden bg-blue-800 dark:bg-gray-800 border-t border-blue-700 dark:border-gray-700">
             <nav className="flex flex-col p-4 gap-2">
               <Link
                 href="/"
                 className="flex items-center gap-3 px-4 py-3 text-white bg-white/10 rounded-lg"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <Home className="w-5 h-5" />
+                <Home className="w-6 h-6" />
                 Home
               </Link>
               <Link
@@ -242,17 +320,18 @@ export default function HomePage() {
           <div className="text-center lg:text-left">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded-full text-sm font-medium mb-6">
               <Zap className="w-4 h-4" />
-              AI-Powered Property Valuations
+              Fast & Accurate Property Valuations
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6 leading-tight">
-              Professional Property<br />
+              Fast, Cheap & Accurate<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-emerald-500">
-                Valuations Made Simple
+                Property Valuations
               </span>
             </h1>
             <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 mb-8">
-              Get accurate property valuations and market analysis using AI. Generate Facebook posts and professional marketing content.
-              Perfect for agents, investors, and property professionals.
+              Get instant property valuations with historic sales prices and comparable sales data.
+              Generate professional valuation reports in minutes, not hours.
+              Trusted by Australian real estate agents and investors.
             </p>
             <div className="flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4">
               <button
@@ -311,7 +390,7 @@ export default function HomePage() {
               <div className="absolute top-4 right-4 px-4 py-2 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-lg shadow-lg">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">AI Analyzing</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">AI Analysing</span>
                 </div>
               </div>
             </div>
@@ -400,7 +479,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">AI Photo Analysis</h3>
             <p className="text-gray-600 dark:text-gray-400">
-              Our AI analyzes property photos to detect renovations, improvements, and quality factors that affect value.
+              Our AI analyses property photos to detect renovations, improvements, and quality factors that affect value.
             </p>
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-lg transition-shadow">
@@ -465,7 +544,7 @@ export default function HomePage() {
               Trusted by Industry Professionals
             </h2>
             <p className="text-lg text-gray-600 dark:text-gray-400">
-              See what real estate agents are saying about PropertyPitch
+              See what real estate agents are saying about PropertyEval
             </p>
           </div>
 
@@ -627,7 +706,7 @@ export default function HomePage() {
             Used by Real Estate Agents Across Australia
           </h2>
           <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8">
-            PropertyPitch helps agents create accurate, professional valuations faster than ever.
+            PropertyEval helps agents create accurate, professional valuations faster than ever.
             Save hours on research and deliver client-ready reports in minutes.
           </p>
 
@@ -684,10 +763,10 @@ export default function HomePage() {
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Home className="w-5 h-5 text-cyan-500" />
-              <span className="font-semibold text-gray-900 dark:text-white">PropertyPitch</span>
-            </div>
+            <Link href="/" className="flex items-center gap-2">
+              <Home className="w-6 h-6 text-cyan-600" />
+              <span className="font-semibold text-gray-900 dark:text-white">PropertyEval</span>
+            </Link>
             <nav className="flex items-center gap-6 text-sm">
               <Link href="/" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                 Home
@@ -700,7 +779,7 @@ export default function HomePage() {
               </Link>
             </nav>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              &copy; {new Date().getFullYear()} PropertyPitch. All rights reserved.
+              &copy; {new Date().getFullYear()} PropertyEval. All rights reserved.
             </p>
           </div>
         </div>

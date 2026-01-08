@@ -6,7 +6,7 @@ import { X, FileText, Database, AlertCircle, CheckCircle2 } from "lucide-react";
 interface EvaluationSourceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (source: "homely" | "reports") => void;
+  onConfirm: (source: "homely" | "reports" | "all") => void;
   hasRpData: boolean;
   hasAdditionalReport: boolean;
   rpDataHasEstimates: boolean;
@@ -22,7 +22,7 @@ export default function EvaluationSourceModal({
   rpDataHasEstimates,
   additionalReportHasEstimates,
 }: EvaluationSourceModalProps) {
-  const [selectedSource, setSelectedSource] = useState<"homely" | "reports" | null>(null);
+  const [selectedSource, setSelectedSource] = useState<"homely" | "reports" | "all" | null>(null);
 
   if (!isOpen) return null;
 
@@ -206,6 +206,46 @@ export default function EvaluationSourceModal({
             </div>
           </div>
 
+          {/* Option 3: All Data */}
+          <div
+            onClick={() => hasReports && hasEstimates && setSelectedSource("all")}
+            className={`p-5 rounded-xl border-2 transition-all ${
+              !hasReports || !hasEstimates
+                ? "border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 cursor-not-allowed opacity-60"
+                : selectedSource === "all"
+                ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20 cursor-pointer"
+                : "border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-700 cursor-pointer"
+            }`}
+          >
+            <div className="flex items-start gap-4">
+              <div className={`p-3 rounded-lg ${
+                selectedSource === "all"
+                  ? "bg-purple-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+              }`}>
+                <Database size={24} />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-gray-900 dark:text-white mb-1">
+                  All Data Combined
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                  Use both Homely comparable sales AND RP Data/Additional Reports together.
+                  The AI will consider all available data sources to provide a comprehensive valuation.
+                </p>
+                <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 text-sm font-medium">
+                  <CheckCircle2 size={16} />
+                  Combines all available data for best accuracy
+                </div>
+              </div>
+              {selectedSource === "all" && (
+                <div className="text-purple-500">
+                  <CheckCircle2 size={24} />
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Note about missing reports */}
           {!hasReports && (
             <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600">
@@ -234,10 +274,16 @@ export default function EvaluationSourceModal({
             className={`flex-1 py-3 rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               selectedSource === "reports"
                 ? "bg-blue-500 hover:bg-blue-600 text-white"
+                : selectedSource === "all"
+                ? "bg-purple-500 hover:bg-purple-600 text-white"
                 : "bg-emerald-500 hover:bg-emerald-600 text-white"
             }`}
           >
-            {selectedSource === "reports" ? "Evaluate with Reports" : "Evaluate with Homely Data"}
+            {selectedSource === "reports"
+              ? "Evaluate with Reports"
+              : selectedSource === "all"
+              ? "Evaluate with All Data"
+              : "Evaluate with Homely Data"}
           </button>
         </div>
       </div>

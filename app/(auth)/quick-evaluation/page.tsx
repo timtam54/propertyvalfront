@@ -344,7 +344,7 @@ export default function QuickEvaluationPage() {
   const getStageText = (stage: EvaluationStage) => {
     switch (stage) {
       case 'queued': return 'Starting evaluation...';
-      case 'fetching_data': return 'Analyzing market data...';
+      case 'fetching_data': return 'Analysing market data...';
       case 'generating_evaluation': return 'Generating report...';
       case 'completed': return 'Evaluation complete!';
       case 'failed': return 'Evaluation failed';
@@ -358,7 +358,7 @@ export default function QuickEvaluationPage() {
       <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50" style={{ padding: '0.75rem 0' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Home className="text-white dark:text-cyan-500" size={28} />
-          <h1 className="text-white dark:text-cyan-500" style={{ fontSize: '1.25rem', fontWeight: 800 }}>PropertyPitch</h1>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 800 }}><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></h1>
         </div>
       </header>
 

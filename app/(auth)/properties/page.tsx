@@ -506,7 +506,7 @@ export default function HomePage() {
             {/* Logo */}
             <div className="flex items-center gap-1.5 sm:gap-2">
               <Home className="w-6 h-6 sm:w-7 sm:h-7 text-white dark:text-cyan-500" />
-              <span className="text-base sm:text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
+              <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
             </div>
 
             {/* Desktop Navigation Buttons */}

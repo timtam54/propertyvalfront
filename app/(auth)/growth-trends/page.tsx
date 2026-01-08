@@ -60,7 +60,7 @@ export default function GrowthTrendsPage() {
         setTrendsData(null);
       }
     } catch (err) {
-      console.error('Error analyzing trends:', err);
+      console.error('Error analysing trends:', err);
       setError('Failed to calculate trends');
       setTrendsData(null);
     } finally {
@@ -101,7 +101,7 @@ export default function GrowthTrendsPage() {
               Growth Trends Analysis
             </h1>
             <p style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: '1.1rem', margin: '0.5rem 0 0 0' }}>
-              Analyze property price growth and market trends
+              Analyse property price growth and market trends
             </p>
           </div>
         </div>
@@ -233,7 +233,7 @@ export default function GrowthTrendsPage() {
               cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? 'Analyzing...' : 'Analyze Trends'}
+            {loading ? 'Analysing...' : 'Analyse Trends'}
           </button>
         </div>
 
@@ -448,7 +448,7 @@ export default function GrowthTrendsPage() {
           }}>
             <div style={{ fontSize: '48px', marginBottom: '1rem', opacity: 0.5 }}>📈</div>
             <p style={{ fontSize: '1.125rem', margin: 0 }}>
-              Enter a suburb above and click &quot;Analyze Trends&quot; to see growth data
+              Enter a suburb above and click &quot;Analyse Trends&quot; to see growth data
             </p>
           </div>
         )}

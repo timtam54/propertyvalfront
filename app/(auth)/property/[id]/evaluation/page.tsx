@@ -58,6 +58,8 @@ interface Property {
   // Status fields
   status?: 'active' | 'sold' | null;
   sold_price?: number | null;
+  // Evaluation type: H = Homely, R = RP Data/Other Reports, A = All Data
+  evaluation_type?: 'H' | 'R' | 'A' | null;
   // New valuation quality fields
   valuation_history?: ValuationHistoryEntry[];
   confidence_scoring?: ConfidenceScoring | null;
@@ -138,7 +140,7 @@ export default function PropertyEvaluationPage() {
 
   // Evaluation Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
-  const [evaluationSource, setEvaluationSource] = useState<'homely' | 'reports' | null>(null);
+  const [evaluationSource, setEvaluationSource] = useState<'homely' | 'reports' | 'all' | null>(null);
 
   // OpenAI Expired Dialog state
   const [showOpenAIExpiredDialog, setShowOpenAIExpiredDialog] = useState(false);
@@ -606,13 +608,13 @@ export default function PropertyEvaluationPage() {
   };
 
   // Handler for source modal confirmation
-  const handleSourceConfirm = (source: 'homely' | 'reports') => {
+  const handleSourceConfirm = (source: 'homely' | 'reports' | 'all') => {
     setShowSourceModal(false);
     setEvaluationSource(source);
     evaluateProperty(source);
   };
 
-  const evaluateProperty = async (source: 'homely' | 'reports' = 'homely') => {
+  const evaluateProperty = async (source: 'homely' | 'reports' | 'all' = 'homely') => {
     setEvaluating(true);
     setError(null);
     setWarning(null);
@@ -690,6 +692,10 @@ export default function PropertyEvaluationPage() {
       }
 
       // Update local state immediately with evaluation results
+      // Use evaluation_type from API response if available, otherwise derive from source
+      const evaluationType: 'H' | 'R' | 'A' = data.evaluation_type || (source === 'homely' ? 'H' : source === 'reports' ? 'R' : 'A');
+      console.log(`[EvaluatePage] Source selected: ${source}, API returned evaluation_type: ${data.evaluation_type}, using evaluationType: ${evaluationType}`);
+
       setProperty((prev) =>
         prev
           ? {
@@ -704,6 +710,8 @@ export default function PropertyEvaluationPage() {
               evaluation_date: new Date().toISOString(),
               // Update estimated_value_range to match the new valuation
               estimated_value_range: newEstimatedValueRange || prev.estimated_value_range,
+              // Set evaluation type based on source selected
+              evaluation_type: evaluationType,
             }
           : null
       );
@@ -718,12 +726,14 @@ export default function PropertyEvaluationPage() {
           });
           if (freshResponse.ok) {
             const freshData = await freshResponse.json();
-            // Preserve the new estimated_value_range we calculated, don't let database overwrite it
+            // Preserve values we just set that might not be in the database response yet
             setProperty(prev => ({
               ...freshData,
               estimated_value_range: newEstimatedValueRange || freshData.estimated_value_range,
+              // Preserve evaluation_type - use database value if present, otherwise keep what we just set
+              evaluation_type: freshData.evaluation_type || evaluationType,
             }));
-            console.log('Re-fetched property after evaluation, evaluation_date:', freshData.evaluation_date);
+            console.log('Re-fetched property after evaluation, evaluation_date:', freshData.evaluation_date, 'evaluation_type:', freshData.evaluation_type || evaluationType);
           }
         } catch (e) {
           console.error('Failed to re-fetch after evaluation:', e);
@@ -1464,9 +1474,7 @@ export default function PropertyEvaluationPage() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Home className="text-white dark:text-cyan-500" size={24} />
-            <span className="text-lg font-extrabold text-white dark:text-cyan-500">
-              PropertyPitch
-            </span>
+            <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
           </div>
 
           {/* Desktop Navigation */}
@@ -1907,7 +1915,7 @@ export default function PropertyEvaluationPage() {
               Get Your AI Property Valuation
             </h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-6 max-w-[600px] mx-auto">
-              Our AI analyzes your property photos to detect improvements, then compares with market data.
+              Our AI analyses your property photos to detect improvements, then compares with market data.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', marginBottom: '2rem', maxWidth: '900px', margin: '0 auto 2rem' }}>
@@ -2093,6 +2101,80 @@ export default function PropertyEvaluationPage() {
               >
                 ✨ {evaluating ? 'Re-evaluating...' : 'Re-evaluate Property'}
               </button>
+
+              {/* Evaluation Type Radio Group (Read-only) */}
+              <div style={{
+                marginTop: '1rem',
+                padding: '0.75rem 1rem',
+                background: '#f8fafc',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+              }}>
+                <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.5rem' }}>
+                  Evaluation Basis
+                </div>
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'default',
+                    color: property.evaluation_type === 'H' ? '#059669' : '#94a3b8',
+                    fontWeight: property.evaluation_type === 'H' ? '600' : '400',
+                  }}>
+                    <input
+                      type="radio"
+                      name="evaluationType"
+                      value="H"
+                      checked={property.evaluation_type === 'H'}
+                      readOnly
+                      style={{ cursor: 'default', accentColor: '#059669' }}
+                    />
+                    Homely
+                  </label>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'default',
+                    color: property.evaluation_type === 'R' ? '#059669' : '#94a3b8',
+                    fontWeight: property.evaluation_type === 'R' ? '600' : '400',
+                  }}>
+                    <input
+                      type="radio"
+                      name="evaluationType"
+                      value="R"
+                      checked={property.evaluation_type === 'R'}
+                      readOnly
+                      style={{ cursor: 'default', accentColor: '#059669' }}
+                    />
+                    RP Data / Other Reports
+                  </label>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    cursor: 'default',
+                    color: property.evaluation_type === 'A' ? '#059669' : '#94a3b8',
+                    fontWeight: property.evaluation_type === 'A' ? '600' : '400',
+                  }}>
+                    <input
+                      type="radio"
+                      name="evaluationType"
+                      value="A"
+                      checked={property.evaluation_type === 'A'}
+                      readOnly
+                      style={{ cursor: 'default', accentColor: '#059669' }}
+                    />
+                    All Data
+                  </label>
+                </div>
+                {!property.evaluation_type && (
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                    Not yet evaluated
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Evaluation Report */}
@@ -2179,7 +2261,7 @@ export default function PropertyEvaluationPage() {
                   </div>
                 </div>
 
-                {/* Test Buttons */}
+                {/* Test Buttons 
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => saveEstimatedValueRange(extractRpDataEstimate())}
@@ -2211,7 +2293,7 @@ export default function PropertyEvaluationPage() {
                   >
                     🏠 Homely
                   </button>
-                </div>
+                </div>*/}
               </div>
 
               {isEditingReport ? (

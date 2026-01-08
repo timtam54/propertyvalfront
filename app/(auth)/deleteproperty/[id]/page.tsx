@@ -427,9 +427,7 @@ export default function PropertyDetailPage() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Home className="text-white dark:text-cyan-500" size={24} />
-            <span className="text-lg font-extrabold text-white dark:text-cyan-500">
-              PropertyPitch
-            </span>
+            <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
           </div>
 
           {/* Desktop Navigation */}

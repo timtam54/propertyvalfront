@@ -2443,7 +2443,7 @@ export default function PropertyEvaluationPage() {
                   ✨ AI Selling Pitch
                 </h3>
                 {property.pitch && !isEditingPitch && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <button
                       onClick={copyPitchToClipboard}
                       style={{

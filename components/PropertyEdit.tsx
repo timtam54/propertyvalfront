@@ -157,6 +157,29 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
       setAdditionalReportText(property.additional_report || "");
     } else if (isOpen && !property) {
       // Reset form for new property
+      setFormData({
+        beds: "",
+        baths: "",
+        carpark: "",
+        location: "",
+        price: "",
+        size: "",
+        property_type: "",
+        features: "",
+        strata_body_corps: "",
+        council_rates: "",
+        images: [],
+        agent1_name: "",
+        agent1_phone: "",
+        agent2_name: "",
+        agent2_phone: "",
+        agent_email: "",
+        neighbouring_suburb: "",
+        neighbouring_postcode: "",
+        neighbouring_state: "",
+      });
+      setRpDataText("");
+      setAdditionalReportText("");
       loadAgentSettings();
     }
   }, [property, isOpen]);

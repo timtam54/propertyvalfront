@@ -93,7 +93,7 @@ export const generateEvaluationPDF = async (property, evaluationReport, comparab
   doc.setFontSize(28);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.text('PropertyPitch', pageWidth / 2, 25, { align: 'center' });
+  doc.text('PropertyEval', pageWidth / 2, 25, { align: 'center' });
 
   yPosition = 60;
 
@@ -153,7 +153,7 @@ export const generateEvaluationPDF = async (property, evaluationReport, comparab
   // Footer on cover page
   doc.setFontSize(9);
   doc.setTextColor(148, 163, 184);
-  doc.text('Powered by PropertyPitch AI Valuation System', pageWidth / 2, pageHeight - 20, { align: 'center' });
+  doc.text('Powered by PropertyEval AI Valuation System', pageWidth / 2, pageHeight - 20, { align: 'center' });
 
   // NEW PAGE - Property Images (fetch from Azure via server-side endpoint)
   const base64Images = await fetchImagesAsBase64(property.images || []);
@@ -288,7 +288,7 @@ export const generateEvaluationPDF = async (property, evaluationReport, comparab
     doc.setFontSize(9);
     doc.setTextColor(148, 163, 184);
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    doc.text('© 2025 PropertyPitch - Confidential', pageWidth - 20, pageHeight - 10, { align: 'right' });
+    doc.text('PropertyEval - Confidential', pageWidth - 20, pageHeight - 10, { align: 'right' });
   }
 
   // Generate filename

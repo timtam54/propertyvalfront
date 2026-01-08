@@ -21,8 +21,8 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   metadataBase: new URL("https://propertyval-web.azurewebsites.net"),
   title: {
-    default: "PropertyPitch - AI Property Valuation & Facebook Marketing",
-    template: "%s | PropertyPitch"
+    default: "PropertyEval - AI Property Valuation & Facebook Marketing",
+    template: "%s | PropertyEval"
   },
   description: "AI-powered property valuation platform with market analysis, comparable sales, and Facebook post generation. Get accurate property valuations and create engaging social media marketing content for real estate listings.",
   manifest: "/manifest.json",
@@ -41,18 +41,18 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "PropertyPitch",
+    title: "PropertyEval",
   },
   openGraph: {
     type: "website",
     locale: "en_AU",
-    siteName: "PropertyPitch",
-    title: "PropertyPitch - AI Property Valuation & Facebook Marketing",
+    siteName: "PropertyEval",
+    title: "PropertyEval - AI Property Valuation & Facebook Marketing",
     description: "Get accurate property valuations and generate engaging Facebook posts for your real estate listings with AI-powered analysis.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "PropertyPitch - AI Property Valuation",
+    title: "PropertyEval - AI Property Valuation",
     description: "Property valuation, market analysis & Facebook marketing for real estate professionals.",
   },
 };

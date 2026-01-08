@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Home, Bed, Bath, Car, Building, Edit, Trash2, Search, Upload, CheckCircle, Settings, User, X, LogOut, Menu, MapPin, List, Filter, Star, Download, Plus, TrendingUp, Clock, DollarSign } from "lucide-react";
@@ -122,12 +122,13 @@ export default function HomePage() {
   const [showFavouritesOnly, setShowFavouritesOnly] = useState(false);
   const [showBatchExport, setShowBatchExport] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const loggingOutRef = useRef(false);
 
   const ITEMS_PER_PAGE = 12;
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated (but not if logging out)
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !loggingOutRef.current) {
       router.push("/login");
     }
   }, [isAuthenticated, router]);
@@ -373,6 +374,7 @@ export default function HomePage() {
 
   // Handle logout - defined before conditional return
   const handleLogout = () => {
+    loggingOutRef.current = true;
     if (isGoogleAuthenticated) {
       googleLogout();
       router.push("/");

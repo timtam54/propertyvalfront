@@ -1795,16 +1795,16 @@ export default function PropertyEvaluationPage() {
 
         {/* RP Data Report */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <span className="text-xl">📊</span>
               RP Data Report
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {property.rp_data_report && (
                 <button
                   onClick={handleClearRpData}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
                 >
                   <Trash2 size={16} />
                   Clear
@@ -1812,7 +1812,7 @@ export default function PropertyEvaluationPage() {
               )}
               <button
                 onClick={() => setShowRpDataModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors text-sm"
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors text-sm"
               >
                 <Upload size={16} />
                 {property.rp_data_report ? 'Update' : 'Add'} RP Data
@@ -1843,16 +1843,16 @@ export default function PropertyEvaluationPage() {
 
         {/* Additional Report */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <span className="text-xl">📄</span>
               Additional Report
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {property.additional_report && (
                 <button
                   onClick={handleClearAdditionalReport}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
+                  className="flex items-center gap-1.5 px-3 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors text-sm"
                 >
                   <Trash2 size={16} />
                   Clear
@@ -1860,7 +1860,7 @@ export default function PropertyEvaluationPage() {
               )}
               <button
                 onClick={() => setShowAdditionalReportModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors text-sm"
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-colors text-sm"
               >
                 <Upload size={16} />
                 {property.additional_report ? 'Update' : 'Add'} Report
@@ -2181,32 +2181,32 @@ export default function PropertyEvaluationPage() {
             <div
               style={{
                 background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-                padding: '2.5rem',
+                padding: 'clamp(1rem, 4vw, 2.5rem)',
                 borderRadius: '16px',
                 border: '2px solid #bbf7d0',
                 marginBottom: '2rem',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: '700', margin: 0, color: '#14532d', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <h3 style={{ fontSize: 'clamp(1.1rem, 4vw, 1.5rem)', fontWeight: '700', margin: 0, color: '#14532d', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   Comprehensive Valuation Report
                 </h3>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button
                     onClick={handleExportPDF}
                     disabled={generatingPDF}
                     style={{
                       background: generatingPDF ? '#94a3b8' : '#10b981',
                       color: 'white',
-                      padding: '0.5rem 1rem',
+                      padding: '0.5rem 0.75rem',
                       borderRadius: '8px',
                       border: 'none',
                       cursor: generatingPDF ? 'not-allowed' : 'pointer',
-                      fontSize: '0.9rem',
+                      fontSize: '0.85rem',
                       fontWeight: '600',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.5rem',
+                      gap: '0.35rem',
                     }}
                   >
                     🖨️ {generatingPDF ? 'Generating...' : 'Export PDF'}
@@ -2217,15 +2217,15 @@ export default function PropertyEvaluationPage() {
                       style={{
                         background: '#10b981',
                         color: 'white',
-                        padding: '0.5rem 1rem',
+                        padding: '0.5rem 0.75rem',
                         borderRadius: '8px',
                         border: 'none',
                         cursor: 'pointer',
-                        fontSize: '0.9rem',
+                        fontSize: '0.85rem',
                         fontWeight: '600',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.5rem',
+                        gap: '0.35rem',
                       }}
                     >
                       ✏️ Edit Report
@@ -2235,27 +2235,27 @@ export default function PropertyEvaluationPage() {
               </div>
 
               {/* Estimated Value Range Display */}
-              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 'clamp(0.5rem, 2vw, 1rem)', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 {/* Yellow Value Box */}
                 <div
                   style={{
                     background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                    padding: '1rem 1.5rem',
+                    padding: 'clamp(0.75rem, 2vw, 1rem) clamp(0.75rem, 3vw, 1.5rem)',
                     borderRadius: '12px',
                     border: '2px solid #f59e0b',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '1rem',
+                    gap: 'clamp(0.5rem, 2vw, 1rem)',
                     flex: '1',
-                    minWidth: '200px',
+                    minWidth: '180px',
                   }}
                 >
-                  <span style={{ fontSize: '2rem' }}>🎯</span>
+                  <span style={{ fontSize: 'clamp(1.5rem, 4vw, 2rem)' }}>🎯</span>
                   <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <div style={{ fontSize: 'clamp(0.7rem, 2vw, 0.85rem)', fontWeight: '600', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       Estimated Value Range
                     </div>
-                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#78350f' }}>
+                    <div style={{ fontSize: 'clamp(1.1rem, 3vw, 1.5rem)', fontWeight: '800', color: '#78350f' }}>
                       {displayedEstimate || property.estimated_value_range || 'N/A'}
                     </div>
                   </div>
@@ -2440,7 +2440,7 @@ export default function PropertyEvaluationPage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <h3 style={{ fontSize: '1.5rem', fontWeight: '700', margin: 0, color: '#0c4a6e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  ✨ AI-Generated Selling Pitch
+                  ✨ AI Selling Pitch
                 </h3>
                 {property.pitch && !isEditingPitch && (
                   <div style={{ display: 'flex', gap: '0.5rem' }}>

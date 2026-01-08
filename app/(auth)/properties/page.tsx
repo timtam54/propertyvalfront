@@ -998,7 +998,7 @@ export default function HomePage() {
 
                     <div className="p-4 sm:p-6">
                       <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-1 sm:mb-2 line-clamp-2">
-                        {property.location}
+                        <u>{property.location}</u>
                       </h3>
 
                       {property.user_email && (

@@ -93,7 +93,7 @@ export default function AddPropertyPage() {
       <header className="header">
         <div className="header-content">
           <Home className="text-sky-500" size={32} />
-          <h1 className="logo">EstatePro</h1>
+          <h1 className="logo">PropertyEval</h1>
         </div>
       </header>
 

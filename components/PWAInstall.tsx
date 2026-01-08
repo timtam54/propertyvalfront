@@ -110,7 +110,7 @@ export default function PWAInstall() {
         </div>
 
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 mb-1">Install EstatePro</h3>
+          <h3 className="font-semibold text-gray-900 mb-1">Install PropertyEval</h3>
           {isIOS ? (
             <div className="text-sm text-gray-600 space-y-2">
               <p>Install this app on your iPhone:</p>
@@ -123,7 +123,7 @@ export default function PWAInstall() {
           ) : (
             <>
               <p className="text-sm text-gray-600 mb-3">
-                Get quick access to EstatePro right from your home screen
+                Get quick access to PropertyEval right from your home screen
               </p>
               <button
                 onClick={handleInstallClick}

@@ -1,6 +1,6 @@
 {
-  "name": "EstatePro - Property Valuation",
-  "short_name": "EstatePro",
+  "name": "PropertyEval - Property Valuation",
+  "short_name": "PropertyEval",
   "description": "AI-powered property listing and evaluation platform for the Australian market",
   "start_url": "/",
   "display": "standalone",

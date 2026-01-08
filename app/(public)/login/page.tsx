@@ -144,7 +144,7 @@ export default function Login() {
             color: "#0f172a",
             marginBottom: "0.5rem"
           }}>
-            EstatePro
+            PropertyEval
           </h1>
           <p style={{ color: "#64748b", fontSize: "1rem" }}>
             Sign in to access your property dashboard

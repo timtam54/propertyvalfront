@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Disallow: /properties
+Disallow: /property/
+Disallow: /settings
+Disallow: /admin
+Disallow: /portfolio-import
+Disallow: /data-management
+Disallow: /quick-evaluation
+Disallow: /sold-properties
+Disallow: /growth-trends
+Disallow: /api/
+
+Sitemap: https://propertyeval.com.au/sitemap.xml

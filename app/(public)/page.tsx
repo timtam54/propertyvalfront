@@ -3,7 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
-import { Home, TrendingUp, FileText, Check, X, ArrowRight, BarChart3, Shield, Zap, Star, Quote, MapPin, Building, Users, Clock, LogIn } from 'lucide-react';
+import Link from 'next/link';
+import { Home, TrendingUp, FileText, Check, X, ArrowRight, BarChart3, Shield, Zap, Star, Quote, MapPin, Building, Users, Clock, LogIn, Menu, Info } from 'lucide-react';
 
 // JSON-LD structured data for SEO
 const jsonLd = {
@@ -26,7 +27,7 @@ const jsonLd = {
   provider: {
     '@type': 'Organization',
     name: 'PropertyPitch',
-    url: 'https://propertyval-web.azurewebsites.net',
+    url: 'https://propertyeval.com.au',
   },
   featureList: [
     'AI-Powered Property Valuation',
@@ -151,6 +152,7 @@ const showcaseProperties = [
 export default function HomePage() {
   const router = useRouter();
   const [currentShowcase, setCurrentShowcase] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Auto-rotate showcase
   useEffect(() => {
@@ -176,14 +178,61 @@ export default function HomePage() {
             <Home className="w-8 h-8 text-white dark:text-cyan-500" />
             <span className="text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
           </div>
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-6">
+            <Link href="/" className="text-white font-medium">
+              Home
+            </Link>
+            <Link href="/about" className="text-white/80 hover:text-white transition-colors font-medium">
+              About
+            </Link>
+            <button
+              onClick={() => router.push('/login')}
+              className="flex items-center gap-2 px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </button>
+          </nav>
+          {/* Mobile hamburger button */}
           <button
-            onClick={() => router.push('/login')}
-            className="flex items-center gap-2 px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
           >
-            <LogIn className="w-4 h-4" />
-            Sign In
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden bg-cyan-700 dark:bg-gray-800 border-t border-cyan-600 dark:border-gray-700">
+            <nav className="flex flex-col p-4 gap-2">
+              <Link
+                href="/"
+                className="flex items-center gap-3 px-4 py-3 text-white bg-white/10 rounded-lg"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Home className="w-5 h-5" />
+                Home
+              </Link>
+              <Link
+                href="/about"
+                className="flex items-center gap-3 px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Info className="w-5 h-5" />
+                About
+              </Link>
+              <Link
+                href="/login"
+                className="flex items-center gap-3 px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <LogIn className="w-5 h-5" />
+                Sign In
+              </Link>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Hero Section with Property Showcase */}
@@ -639,6 +688,17 @@ export default function HomePage() {
               <Home className="w-5 h-5 text-cyan-500" />
               <span className="font-semibold text-gray-900 dark:text-white">PropertyPitch</span>
             </div>
+            <nav className="flex items-center gap-6 text-sm">
+              <Link href="/" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                Home
+              </Link>
+              <Link href="/about" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                About
+              </Link>
+              <Link href="/login" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                Login
+              </Link>
+            </nav>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               &copy; {new Date().getFullYear()} PropertyPitch. All rights reserved.
             </p>

@@ -2,22 +2,63 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useState } from 'react';
-import { Home, Users, Target, Award, MapPin, Mail, Phone, LogIn, Info, Menu, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Home, Users, Target, Award, MapPin, Mail, LogIn, Info, Menu, X } from 'lucide-react';
+import { API } from '@/lib/config';
+
+// Track page view for public pages (no auth required)
+async function trackPublicPageView(page: string) {
+  try {
+    // Get IP address
+    let ipaddress = 'unknown';
+    try {
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipResponse.json();
+      ipaddress = ipData.ip || 'unknown';
+    } catch {
+      // Fail silently
+    }
+
+    await fetch(`${API}/audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ipaddress,
+        id: 0,
+        action: 'view',
+        page,
+        username: 'anonymous',
+        dte: new Date().toISOString(),
+        propertyid: 0
+      })
+    });
+  } catch {
+    // Fail silently - audit logging should never break the page
+  }
+}
 
 export default function AboutPage() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const hasTrackedRef = useRef(false);
+
+  // Track page view on mount
+  useEffect(() => {
+    if (!hasTrackedRef.current) {
+      hasTrackedRef.current = true;
+      trackPublicPageView('about');
+    }
+  }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 dark:from-gray-900 dark:to-gray-800">
       {/* Header */}
-      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-blue-700 to-blue-900 dark:from-gray-800 dark:to-gray-900 border-b border-blue-800 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Home className="w-8 h-8 text-white dark:text-cyan-500" />
-            <span className="text-xl font-bold text-white dark:text-cyan-500">PropertyPitch</span>
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <Home className="w-10 h-10 text-white" />
+            <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
+          </Link>
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/" className="text-white/80 hover:text-white transition-colors font-medium">
@@ -28,7 +69,7 @@ export default function AboutPage() {
             </Link>
             <button
               onClick={() => router.push('/login')}
-              className="flex items-center gap-2 px-5 py-2 bg-white text-cyan-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 px-5 py-2 bg-white text-blue-700 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
             >
               <LogIn className="w-4 h-4" />
               Sign In
@@ -44,14 +85,14 @@ export default function AboutPage() {
         </div>
         {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-cyan-700 dark:bg-gray-800 border-t border-cyan-600 dark:border-gray-700">
+          <div className="md:hidden bg-blue-800 dark:bg-gray-800 border-t border-blue-700 dark:border-gray-700">
             <nav className="flex flex-col p-4 gap-2">
               <Link
                 href="/"
                 className="flex items-center gap-3 px-4 py-3 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <Home className="w-5 h-5" />
+                <Home className="w-6 h-6" />
                 Home
               </Link>
               <Link
@@ -79,7 +120,7 @@ export default function AboutPage() {
       <section className="max-w-6xl mx-auto px-4 py-16 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 rounded-full text-sm font-medium mb-6">
           <Info className="w-4 h-4" />
-          About PropertyPitch
+          About PropertyEval
         </div>
         <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-6">
           Transforming Property Valuations<br />
@@ -88,7 +129,7 @@ export default function AboutPage() {
           </span>
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-          PropertyPitch is an Australian-built platform designed to help real estate professionals
+          PropertyEval is an Australian-built platform designed to help real estate professionals
           create accurate, professional property valuations faster than ever before.
         </p>
       </section>
@@ -103,7 +144,7 @@ export default function AboutPage() {
               are time-consuming, often requiring hours of research across multiple platforms.
             </p>
             <p className="text-gray-600 dark:text-gray-300 mb-4">
-              PropertyPitch combines artificial intelligence, comprehensive market data, and intuitive
+              PropertyEval combines artificial intelligence, comprehensive market data, and intuitive
               design to deliver professional-grade valuations in minutes, not hours.
             </p>
             <p className="text-gray-600 dark:text-gray-300">
@@ -193,7 +234,7 @@ export default function AboutPage() {
         <div className="bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-2xl p-8 sm:p-12 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">Get In Touch</h2>
           <p className="text-cyan-100 max-w-xl mx-auto mb-8">
-            Have questions about PropertyPitch? We'd love to hear from you.
+            Have questions about PropertyEval? We'd love to hear from you.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
             <a href="mailto:support@propertyeval.com.au" className="flex items-center gap-2 text-white hover:text-cyan-100 transition-colors">
@@ -208,10 +249,10 @@ export default function AboutPage() {
       <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Home className="w-5 h-5 text-cyan-500" />
-              <span className="font-semibold text-gray-900 dark:text-white">PropertyPitch</span>
-            </div>
+            <Link href="/" className="flex items-center gap-2">
+              <Home className="w-6 h-6 text-cyan-600" />
+              <span className="font-semibold text-gray-900 dark:text-white">PropertyEval</span>
+            </Link>
             <nav className="flex items-center gap-6 text-sm">
               <Link href="/" className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                 Home
@@ -224,7 +265,7 @@ export default function AboutPage() {
               </Link>
             </nav>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              &copy; {new Date().getFullYear()} PropertyPitch. All rights reserved.
+              &copy; {new Date().getFullYear()} PropertyEval. All rights reserved.
             </p>
           </div>
         </div>

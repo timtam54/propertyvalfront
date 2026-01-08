@@ -2107,18 +2107,19 @@ export default function PropertyEvaluationPage() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                 <h3 style={{ fontSize: '1.5rem', fontWeight: '700', margin: 0, color: '#14532d', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  💰 Comprehensive Valuation Report
+                  Comprehensive Valuation Report
                 </h3>
-                {!isEditingReport && (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
-                    onClick={startEditingReport}
+                    onClick={handleExportPDF}
+                    disabled={generatingPDF}
                     style={{
-                      background: '#10b981',
+                      background: generatingPDF ? '#94a3b8' : '#10b981',
                       color: 'white',
                       padding: '0.5rem 1rem',
                       borderRadius: '8px',
                       border: 'none',
-                      cursor: 'pointer',
+                      cursor: generatingPDF ? 'not-allowed' : 'pointer',
                       fontSize: '0.9rem',
                       fontWeight: '600',
                       display: 'flex',
@@ -2126,9 +2127,29 @@ export default function PropertyEvaluationPage() {
                       gap: '0.5rem',
                     }}
                   >
-                    ✏️ Edit Report
+                    🖨️ {generatingPDF ? 'Generating...' : 'Export PDF'}
                   </button>
-                )}
+                  {!isEditingReport && (
+                    <button
+                      onClick={startEditingReport}
+                      style={{
+                        background: '#10b981',
+                        color: 'white',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      ✏️ Edit Report
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Estimated Value Range Display */}
@@ -2302,28 +2323,6 @@ export default function PropertyEvaluationPage() {
 
             {/* Action Buttons */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem', padding: '1rem 0' }}>
-              {/* Export as PDF - DISABLED
-              <button
-                onClick={handleExportPDF}
-                disabled={generatingPDF}
-                style={{
-                  background: generatingPDF ? '#94a3b8' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  padding: '1rem 2rem',
-                  borderRadius: '12px',
-                  border: 'none',
-                  cursor: generatingPDF ? 'not-allowed' : 'pointer',
-                  fontSize: '1.05rem',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
-              >
-                📥 {generatingPDF ? 'Generating PDF...' : 'Export as PDF'}
-              </button>
-              */}
-
               {/* Create Marketing Ad - DISABLED
               <button
                 onClick={generateAdFromEvaluation}

@@ -58,7 +58,7 @@ interface PropertyEditProps {
 }
 
 export default function PropertyEdit({ property, userEmail, onSave, onClose, isOpen }: PropertyEditProps) {
-  const isEditing = !!property?.id;
+  const isEditing = !!property?.id && property.id !== "0";
   const [loading, setLoading] = useState(false);
   const { loaded: googleLoaded } = useGoogleMaps();
   const [formData, setFormData] = useState({
@@ -95,6 +95,7 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
 
   const locationInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const formInitializedRef = useRef(false);
 
   // Initialize Google Places Autocomplete
   useEffect(() => {
@@ -129,9 +130,18 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
     }
   }, [isOpen]);
 
-  // Populate form when editing
+  // Populate form when editing - only initialize once per modal open
   useEffect(() => {
-    if (property && isOpen) {
+    if (!isOpen) {
+      formInitializedRef.current = false;
+      return;
+    }
+
+    if (formInitializedRef.current) {
+      return; // Already initialized for this session
+    }
+
+    if (property) {
       setFormData({
         beds: property.beds.toString(),
         baths: property.baths.toString(),
@@ -155,7 +165,8 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
       });
       setRpDataText(property.rp_data_report || "");
       setAdditionalReportText(property.additional_report || "");
-    } else if (isOpen && !property) {
+      formInitializedRef.current = true;
+    } else {
       // Reset form for new property
       setFormData({
         beds: "",
@@ -181,6 +192,7 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
       setRpDataText("");
       setAdditionalReportText("");
       loadAgentSettings();
+      formInitializedRef.current = true;
     }
   }, [property, isOpen]);
 
@@ -429,8 +441,8 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
         neighbouring_state: formData.neighbouring_state || null,
       };
 
-      const url = property?.id ? `${API}/properties/${property.id}` : `${API}/properties`;
-      const method = property?.id ? 'PUT' : 'POST';
+      const url = isEditing ? `${API}/properties/${property!.id}` : `${API}/properties`;
+      const method = isEditing ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method,

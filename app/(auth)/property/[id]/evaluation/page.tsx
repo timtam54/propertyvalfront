@@ -421,17 +421,21 @@ export default function PropertyEvaluationPage() {
         await fetchProperty();
         toast.success("PDF uploaded successfully!");
       } else if (data.type === "text" && data.text) {
-        await fetch(`${API}/properties/${propertyId}/update-rp-data`, {
+        const textResponse = await fetch(`${API}/properties/${propertyId}/update-rp-data`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ report: data.text }),
         });
+        if (!textResponse.ok) {
+          throw new Error(`Failed to save: ${textResponse.status}`);
+        }
         setProperty((prev) => prev ? { ...prev, rp_data_report: data.text } : null);
         toast.success("RP Data report added successfully!");
       }
       setShowRpDataModal(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "Failed to upload RP Data");
+      console.error('RP Data upload error:', error);
+      toast.error(error.response?.data?.detail || error.message || "Failed to upload RP Data");
     } finally {
       setUploadingRpData(false);
     }

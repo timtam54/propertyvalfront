@@ -910,9 +910,21 @@ ${hasAdditionalReport ? '📄 ADDITIONAL REPORT IS AVAILABLE - EXTRACT AND USE I
       const timeAdjustmentPercent = Math.min(monthsSinceSale * 0.4, 15); // Cap at 15%
       const timeAdjustment = Math.round(refPrice * (timeAdjustmentPercent / 100));
 
-      // Calculate land area adjustment ($1000/sqm is typical for QLD)
+      // Calculate land area adjustment using PERCENTAGE approach (more realistic)
+      // Land typically accounts for 30-50% of property value
+      // Adjust proportionally based on land size difference
       const landDifference = subjectLandArea - refLandArea;
-      const landAdjustment = landDifference > 0 ? landDifference * 1000 : landDifference * 800; // Less penalty for smaller
+      let landAdjustmentPercent = 0;
+      if (refLandArea > 0 && landDifference !== 0) {
+        // Calculate % difference in land size
+        const landDiffPercent = (landDifference / refLandArea) * 100;
+        // Land value is roughly 40% of total property value
+        // So land adjustment = (land diff %) * 0.4 (land component) * 0.5 (diminishing returns)
+        landAdjustmentPercent = landDiffPercent * 0.4 * 0.5;
+        // Cap land adjustment to +/- 15% of property value
+        landAdjustmentPercent = Math.max(-15, Math.min(15, landAdjustmentPercent));
+      }
+      const landAdjustment = Math.round(refPrice * (landAdjustmentPercent / 100));
 
       // Build adjustment breakdown
       let adjustmentText = '';
@@ -923,7 +935,9 @@ MANDATORY ADJUSTMENTS TO APPLY:
    - Market growth since then: +${timeAdjustmentPercent.toFixed(1)}% = +${formatPrice(timeAdjustment)}
 
 2. LAND SIZE ADJUSTMENT: Subject has ${subjectLandArea}m², comparable has ${refLandArea}m² (difference: ${landDifference > 0 ? '+' : ''}${landDifference}m²)
-   - At $1,000/sqm: ${landDifference > 0 ? '+' : ''}${formatPrice(Math.abs(landAdjustment))}
+   - Land represents ~40% of property value with diminishing returns
+   - Adjustment: ${landAdjustmentPercent > 0 ? '+' : ''}${landAdjustmentPercent.toFixed(1)}% = ${landAdjustment > 0 ? '+' : ''}${formatPrice(Math.abs(landAdjustment))}
+   - Note: Land adjustments are capped at +/- 15% of property value
 
 3. QUALITY/CONDITION: Assess from photos and description
    - Superior build/views/condition: +5-10%
@@ -935,7 +949,7 @@ STARTING PRICE: ${formatPrice(refPrice)}
 + Land adjustment: ${formatPrice(landAdjustment)}
 = ADJUSTED BASE: ${formatPrice(refPrice + timeAdjustment + landAdjustment)}
 
-YOUR VALUATION MUST BE AT OR ABOVE ${formatPrice(refPrice + timeAdjustment + landAdjustment)} for a property that is EQUAL OR BETTER than the comparable.
+YOUR VALUATION MUST be based on comparable sales. If the subject property is similar to comparables, value it near their prices.
 `;
       }
 
@@ -1293,8 +1307,8 @@ ${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis secti
       valuationBasis = 'AI valuation with adjustments';
       console.log(`[Evaluate] Extracted AI range: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
     } else {
-      // Fallback: Try to find any dollar range in the Estimated Value Range section
-      const sectionMatch = evaluationReport.match(/##\s*\d+\.\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–|and)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
+      // Fallback: Try to find any dollar range in the Estimated Value Range section (any section number)
+      const sectionMatch = evaluationReport.match(/##\s*\d+\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–|and)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
 
       if (sectionMatch) {
         valueLow = parseInt(sectionMatch[1].replace(/,/g, ''));

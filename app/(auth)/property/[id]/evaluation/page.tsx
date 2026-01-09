@@ -190,16 +190,16 @@ export default function PropertyEvaluationPage() {
     return 'N/A';
   };
 
-  // Helper function to extract Homely estimate from Section 5 "Estimated Value Range"
+  // Helper function to extract Homely estimate from "Estimated Value Range" section
   // Accepts optional report parameter for use after evaluation (before state updates)
   const extractHomelyEstimate = (report?: string): string => {
     const evalReport = report || property?.evaluation_report;
     if (!evalReport) return 'N/A';
 
-    // Find Section 5 "Estimated Value Range" and extract the dollar range
-    const section5Match = evalReport.match(/##\s*5\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
-    if (section5Match) {
-      return `$${section5Match[1]} - $${section5Match[2]}`;
+    // Find any section number (4, 5, 6, 7, etc.) "Estimated Value Range" and extract the dollar range
+    const sectionMatch = evalReport.match(/##\s*\d+\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
+    if (sectionMatch) {
+      return `$${sectionMatch[1]} - $${sectionMatch[2]}`;
     }
 
     // Fallback: look for "estimated value range" with dollar amounts anywhere
@@ -560,7 +560,8 @@ export default function PropertyEvaluationPage() {
     setError(null);
 
     try {
-      const response = await fetch(`${API}/properties/${propertyId}/recalculate`, {
+      // Use local Next.js API route directly (not through proxy)
+      const response = await fetch(`/api/properties/${propertyId}/recalculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ selected_comparable_ids: selectedIds }),
@@ -1287,6 +1288,118 @@ export default function PropertyEvaluationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      {/* Full-screen Loading Overlay */}
+      {(evaluating || recalculating) && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9998,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '24px',
+          }}
+        >
+          {/* Spinner Container */}
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '24px',
+              padding: '48px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '24px',
+              maxWidth: '400px',
+              width: '90%',
+            }}
+          >
+            {/* Animated Spinner */}
+            <div
+              style={{
+                width: '64px',
+                height: '64px',
+                border: '4px solid #e5e7eb',
+                borderTop: '4px solid #10b981',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+
+            {/* Loading Text */}
+            <div style={{ textAlign: 'center' }}>
+              <h3 style={{
+                margin: '0 0 8px 0',
+                fontSize: '20px',
+                fontWeight: '600',
+                color: '#111827'
+              }}>
+                {evaluating ? 'Evaluating Property' : 'Recalculating Valuation'}
+              </h3>
+              <p style={{
+                margin: 0,
+                fontSize: '14px',
+                color: '#6b7280',
+                lineHeight: '1.5'
+              }}>
+                {evaluating
+                  ? 'Analyzing comparables and generating AI valuation report...'
+                  : 'Updating valuation with selected comparables...'}
+              </p>
+              <p style={{
+                margin: '12px 0 0 0',
+                fontSize: '13px',
+                color: '#9ca3af'
+              }}>
+                This may take up to 2 minutes
+              </p>
+            </div>
+
+            {/* Progress Dots Animation */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: '#10b981',
+                    animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 80%, 100% {
+            transform: scale(0.6);
+            opacity: 0.5;
+          }
+          40% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+      `}</style>
+
       {/* Evaluation Source Modal */}
       <EvaluationSourceModal
         isOpen={showSourceModal}
@@ -2393,18 +2506,6 @@ export default function PropertyEvaluationPage() {
                 onRecalculate={handleRecalculate}
                 currentValue={property.comparables_data?.statistics?.price_range?.median || undefined}
               />
-              {recalculating && (
-                <div style={{
-                  marginTop: '1rem',
-                  padding: '1rem',
-                  background: '#dbeafe',
-                  borderRadius: '8px',
-                  textAlign: 'center',
-                  color: '#1e40af'
-                }}>
-                  Recalculating valuation with selected comparables...
-                </div>
-              )}
             </div>
 
             {/* Action Buttons */}

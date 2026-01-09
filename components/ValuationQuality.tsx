@@ -433,13 +433,10 @@ export default function ValuationQuality({
   );
 
   const handleToggle = (id: string) => {
-    setLocalSelected(prev => {
-      const newSelected = prev.includes(id)
-        ? prev.filter(s => s !== id)
-        : [...prev, id];
-      onComparableToggle?.(id);
-      return newSelected;
-    });
+    setLocalSelected(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+    onComparableToggle?.(id);
   };
 
   const handleRecalculate = () => {

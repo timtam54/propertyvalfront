@@ -43,6 +43,43 @@ async function fetchImagesAsBase64(imageUrls) {
 }
 
 /**
+ * Parse markdown text and extract formatting
+ * @param {string} text - The markdown text to parse
+ * @returns {Array} - Array of text segments with formatting info
+ */
+function parseMarkdownLine(text) {
+  const segments = [];
+  let remaining = text;
+
+  // Process bold text (**text** or __text__)
+  const boldRegex = /\*\*(.+?)\*\*|__(.+?)__/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = boldRegex.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, match.index), bold: false });
+    }
+    // Add the bold text
+    segments.push({ text: match[1] || match[2], bold: true });
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), bold: false });
+  }
+
+  // If no segments, return the whole text
+  if (segments.length === 0) {
+    segments.push({ text, bold: false });
+  }
+
+  return segments;
+}
+
+/**
  * Generate a professional PDF proposal from property evaluation data
  * @param {Object} property - Property details
  * @param {string} evaluationReport - The evaluation report text
@@ -54,108 +91,193 @@ export const generateEvaluationPDF = async (property, evaluationReport, comparab
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+  const marginLeft = 20;
+  const marginRight = 20;
+  const contentWidth = pageWidth - marginLeft - marginRight;
   let yPosition = 20;
+
+  // Color palette
+  const colors = {
+    primary: [14, 165, 233],      // Sky blue
+    primaryDark: [2, 132, 199],   // Darker blue
+    heading: [15, 23, 42],        // Slate 900
+    subheading: [30, 58, 138],    // Blue 800
+    text: [51, 65, 85],           // Slate 600
+    lightText: [100, 116, 139],   // Slate 500
+    muted: [148, 163, 184],       // Slate 400
+    accent: [16, 185, 129],       // Emerald 500
+    warning: [245, 158, 11],      // Amber 500
+    bgLight: [240, 249, 255],     // Sky 50
+    bgAccent: [236, 253, 245],    // Emerald 50
+    white: [255, 255, 255],
+  };
 
   // Helper function to add new page if needed
   const checkPageBreak = (requiredSpace = 20) => {
-    if (yPosition + requiredSpace > pageHeight - 20) {
+    if (yPosition + requiredSpace > pageHeight - 25) {
       doc.addPage();
-      yPosition = 20;
-      // Reset to default font to prevent style carryover
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.setTextColor(51, 65, 85);
+      yPosition = 25;
       return true;
     }
     return false;
   };
 
-  // Helper function to add text with word wrap
-  const addText = (text, fontSize = 11, color = [0, 0, 0], fontStyle = 'normal') => {
-    doc.setFontSize(fontSize);
-    doc.setTextColor(...color);
-    doc.setFont('helvetica', fontStyle);
-    const splitText = doc.splitTextToSize(text, pageWidth - 40);
-
-    splitText.forEach(line => {
-      checkPageBreak();
-      doc.text(line, 20, yPosition);
-      yPosition += fontSize * 0.5;
-    });
-    yPosition += 5;
+  // Helper to draw a rounded box
+  const drawBox = (x, y, width, height, fillColor, borderColor = null, borderRadius = 5) => {
+    doc.setFillColor(...fillColor);
+    doc.roundedRect(x, y, width, height, borderRadius, borderRadius, 'F');
+    if (borderColor) {
+      doc.setDrawColor(...borderColor);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(x, y, width, height, borderRadius, borderRadius, 'S');
+    }
   };
 
-  // COVER PAGE
-  // Header with logo placeholder
-  doc.setFillColor(14, 165, 233); // Sky blue
-  doc.rect(0, 0, pageWidth, 40, 'F');
+  // Helper to render text with inline bold
+  const renderFormattedText = (text, x, y, maxWidth, fontSize = 11, baseColor = colors.text) => {
+    const segments = parseMarkdownLine(text);
+    let currentX = x;
+    doc.setFontSize(fontSize);
 
+    segments.forEach(segment => {
+      if (segment.bold) {
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...colors.heading);
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...baseColor);
+      }
+
+      const textWidth = doc.getTextWidth(segment.text);
+
+      // Check if we need to wrap
+      if (currentX + textWidth > x + maxWidth) {
+        // Simple wrap - just render what fits
+        const words = segment.text.split(' ');
+        words.forEach((word, idx) => {
+          const wordWidth = doc.getTextWidth(word + ' ');
+          if (currentX + wordWidth > x + maxWidth) {
+            y += fontSize * 0.5;
+            currentX = x;
+            checkPageBreak();
+          }
+          doc.text(word + (idx < words.length - 1 ? ' ' : ''), currentX, y);
+          currentX += wordWidth;
+        });
+      } else {
+        doc.text(segment.text, currentX, y);
+        currentX += textWidth;
+      }
+    });
+
+    return y;
+  };
+
+  // ==================== COVER PAGE ====================
+
+  // Header gradient bar
+  doc.setFillColor(...colors.primary);
+  doc.rect(0, 0, pageWidth, 45, 'F');
+  doc.setFillColor(...colors.primaryDark);
+  doc.rect(0, 40, pageWidth, 5, 'F');
+
+  // Logo/Brand
+  doc.setFontSize(32);
+  doc.setTextColor(...colors.white);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PropertyEval', pageWidth / 2, 28, { align: 'center' });
+
+  yPosition = 70;
+
+  // Main title
   doc.setFontSize(28);
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...colors.heading);
   doc.setFont('helvetica', 'bold');
-  doc.text('PropertyEval', pageWidth / 2, 25, { align: 'center' });
-
-  yPosition = 60;
-
-  // Title
-  doc.setFontSize(24);
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Property Evaluation Report', pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += 20;
+  doc.text('Property Valuation Report', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 15;
 
   // Property address
-  doc.setFontSize(16);
-  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(14);
+  doc.setTextColor(...colors.lightText);
   doc.setFont('helvetica', 'normal');
-  doc.text(property.location || 'Property Address', pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += 30;
-
-  // Property summary box
-  doc.setFillColor(240, 249, 255);
-  doc.roundedRect(20, yPosition, pageWidth - 40, 60, 5, 5, 'F');
-
-  yPosition += 15;
-  doc.setFontSize(12);
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Property Summary', 30, yPosition);
-  yPosition += 10;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  const summaryLines = [
-    `${property.beds} Bedrooms  •  ${property.baths} Bathrooms  •  ${property.carpark} Car Parks`,
-    property.size ? `Size: ${property.size} sqm` : '',
-    property.property_type ? `Type: ${property.property_type}` : '',
-    pricePerSqm ? `Price per sqm: $${pricePerSqm.toLocaleString()}/sqm` : ''
-  ].filter(Boolean);
-
-  summaryLines.forEach(line => {
-    doc.text(line, 30, yPosition);
+  const addressLines = doc.splitTextToSize(property.location || 'Property Address', pageWidth - 60);
+  addressLines.forEach(line => {
+    doc.text(line, pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 7;
   });
+  yPosition += 15;
 
-  yPosition += 30;
+  // Property summary card
+  drawBox(25, yPosition, pageWidth - 50, 70, colors.bgLight, colors.primary);
+  yPosition += 15;
 
-  // Date and report type
+  doc.setFontSize(14);
+  doc.setTextColor(...colors.primaryDark);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Property Summary', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 12;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  doc.setTextColor(...colors.text);
+
+  // Property specs in a nice layout
+  const specs = [
+    `${property.beds || 0} Bedrooms`,
+    `${property.baths || 0} Bathrooms`,
+    `${property.carpark || 0} Car Spaces`
+  ].join('   •   ');
+  doc.text(specs, pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 10;
+
+  if (property.size) {
+    doc.text(`Land Size: ${property.size} sqm`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+  }
+  if (property.property_type) {
+    doc.text(`Property Type: ${property.property_type}`, pageWidth / 2, yPosition, { align: 'center' });
+  }
+
+  yPosition += 45;
+
+  // Estimated value highlight box (if we can extract it)
+  const valueMatch = evaluationReport?.match(/##\s*\d+\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
+  if (valueMatch) {
+    drawBox(30, yPosition, pageWidth - 60, 45, colors.bgAccent, colors.accent);
+    yPosition += 12;
+
+    doc.setFontSize(11);
+    doc.setTextColor(...colors.accent);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ESTIMATED VALUE RANGE', pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 15;
+
+    doc.setFontSize(22);
+    doc.setTextColor(...colors.heading);
+    doc.text(`$${valueMatch[1]} - $${valueMatch[2]}`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 30;
+  }
+
+  // Report metadata
+  yPosition = pageHeight - 50;
   doc.setFontSize(10);
-  doc.setTextColor(100, 116, 139);
+  doc.setTextColor(...colors.lightText);
+  doc.setFont('helvetica', 'normal');
   const reportDate = new Date().toLocaleDateString('en-AU', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
   });
-  doc.text(`Report Date: ${reportDate}`, pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(`Report Generated: ${reportDate}`, pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 7;
   doc.text('Confidential Market Valuation', pageWidth / 2, yPosition, { align: 'center' });
 
-  // Footer on cover page
+  // Footer
   doc.setFontSize(9);
-  doc.setTextColor(148, 163, 184);
-  doc.text('Powered by PropertyEval AI Valuation System', pageWidth / 2, pageHeight - 20, { align: 'center' });
+  doc.setTextColor(...colors.muted);
+  doc.text('Powered by PropertyEval AI Valuation System', pageWidth / 2, pageHeight - 15, { align: 'center' });
 
-  // NEW PAGE - Property Images (fetch from Azure via server-side endpoint)
+  // ==================== PROPERTY IMAGES PAGE ====================
   const base64Images = await fetchImagesAsBase64(property.images || []);
 
   if (base64Images.length > 0) {
@@ -163,42 +285,35 @@ export const generateEvaluationPDF = async (property, evaluationReport, comparab
     yPosition = 20;
 
     // Section header
-    doc.setFillColor(14, 165, 233);
-    doc.rect(0, yPosition - 5, pageWidth, 15, 'F');
-    doc.setFontSize(16);
-    doc.setTextColor(255, 255, 255);
+    doc.setFillColor(...colors.primary);
+    doc.rect(0, 0, pageWidth, 20, 'F');
+    doc.setFontSize(14);
+    doc.setTextColor(...colors.white);
     doc.setFont('helvetica', 'bold');
-    doc.text('Property Photos', pageWidth / 2, yPosition + 5, { align: 'center' });
-    yPosition += 25;
+    doc.text('Property Photos', pageWidth / 2, 13, { align: 'center' });
+    yPosition = 35;
 
-    // Add images in a grid layout (2 columns), limit to 3
+    // Add images in a grid layout
     const maxImages = 3;
     const imageWidth = (pageWidth - 50) / 2;
     const imageHeight = 70;
     let col = 0;
-    let imagesAdded = 0;
 
     for (let i = 0; i < Math.min(base64Images.length, maxImages); i++) {
       const imageData = base64Images[i];
 
       try {
-        // Calculate position
         const xPos = 20 + col * (imageWidth + 10);
 
-        // Check if we need a new page
         if (yPosition + imageHeight > pageHeight - 30) {
           doc.addPage();
-          yPosition = 20;
+          yPosition = 25;
         }
 
-        // Add the image
         const imageType = imageData.includes('png') ? 'PNG' : 'JPEG';
         doc.addImage(imageData, imageType, xPos, yPosition, imageWidth, imageHeight, undefined, 'MEDIUM');
 
-        imagesAdded++;
         col++;
-
-        // Move to next row after 2 images
         if (col >= 2) {
           col = 0;
           yPosition += imageHeight + 10;
@@ -208,87 +323,218 @@ export const generateEvaluationPDF = async (property, evaluationReport, comparab
       }
     }
 
-    // Add note about total images if there are more
     const totalImages = (property.images || []).length;
-    if (totalImages > maxImages && imagesAdded > 0) {
+    if (totalImages > maxImages) {
       yPosition += col > 0 ? imageHeight + 15 : 10;
       doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Showing ${imagesAdded} of ${totalImages} photos`, pageWidth / 2, yPosition, { align: 'center' });
+      doc.setTextColor(...colors.lightText);
+      doc.text(`Showing ${Math.min(base64Images.length, maxImages)} of ${totalImages} photos`, pageWidth / 2, yPosition, { align: 'center' });
     }
   }
 
-  // NEW PAGE - Full Evaluation Report
+  // ==================== DETAILED EVALUATION REPORT ====================
   doc.addPage();
   yPosition = 20;
 
   // Section header
-  doc.setFillColor(14, 165, 233);
-  doc.rect(0, yPosition - 5, pageWidth, 15, 'F');
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
+  doc.setFillColor(...colors.primary);
+  doc.rect(0, 0, pageWidth, 20, 'F');
+  doc.setFontSize(14);
+  doc.setTextColor(...colors.white);
   doc.setFont('helvetica', 'bold');
-  doc.text('Detailed Evaluation Report', pageWidth / 2, yPosition + 5, { align: 'center' });
-  yPosition += 25;
+  doc.text('Detailed Evaluation Report', pageWidth / 2, 13, { align: 'center' });
+  yPosition = 35;
 
-  // Evaluation report content - very strict formatting for consistency
+  // Process the evaluation report with proper markdown parsing
   const reportLines = evaluationReport.split('\n');
 
-  reportLines.forEach(line => {
+  reportLines.forEach((line, lineIndex) => {
     const trimmedLine = line.trim();
 
-    // Skip empty lines with small spacing
+    // Skip empty lines
     if (!trimmedLine) {
+      yPosition += 3;
+      return;
+    }
+
+    // Detect main section headings: ## 1. Title or ## Title
+    const mainHeadingMatch = trimmedLine.match(/^##\s*(\d+\.?\s*)?(.+)$/);
+    if (mainHeadingMatch) {
+      checkPageBreak(20);
+      yPosition += 8;
+
+      // Draw a subtle background for section headers
+      drawBox(marginLeft - 5, yPosition - 6, contentWidth + 10, 12, colors.bgLight);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(...colors.primaryDark);
+
+      const headingText = mainHeadingMatch[1]
+        ? `${mainHeadingMatch[1]}${mainHeadingMatch[2]}`
+        : mainHeadingMatch[2];
+      doc.text(headingText, marginLeft, yPosition);
+      yPosition += 12;
+      return;
+    }
+
+    // Detect sub-headings with ** at the start
+    const subHeadingMatch = trimmedLine.match(/^\*\*(.+?)\*\*:?$/);
+    if (subHeadingMatch) {
+      checkPageBreak(15);
+      yPosition += 5;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...colors.subheading);
+      doc.text(subHeadingMatch[1] + (trimmedLine.endsWith(':') ? ':' : ''), marginLeft, yPosition);
+      yPosition += 8;
+      return;
+    }
+
+    // Detect bullet points (- or •)
+    const bulletMatch = trimmedLine.match(/^[-•]\s*(.+)$/);
+    if (bulletMatch) {
+      checkPageBreak(12);
+
+      // Draw bullet
+      doc.setFillColor(...colors.primary);
+      doc.circle(marginLeft + 3, yPosition - 2, 1.5, 'F');
+
+      // Render bullet content with potential bold text
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.text);
+
+      const bulletText = bulletMatch[1];
+      const bulletLines = doc.splitTextToSize(bulletText, contentWidth - 15);
+
+      bulletLines.forEach((bulletLine, idx) => {
+        checkPageBreak();
+
+        // Check for bold text in the line
+        if (bulletLine.includes('**')) {
+          renderFormattedText(bulletLine.replace(/\*\*/g, ''), marginLeft + 10, yPosition, contentWidth - 15, 10);
+        } else {
+          doc.text(bulletLine, marginLeft + 10, yPosition);
+        }
+        yPosition += 5;
+      });
       yPosition += 2;
       return;
     }
 
-    // VERY STRICT heading detection - only numbered sections like "1)", "2)", "1.", "2."
-    // This ensures only main section headings are formatted differently
-    const isMainHeading = /^(\d+[.)]\s)/.test(trimmedLine);
+    // Detect numbered list items (1. 2. 3.)
+    const numberedMatch = trimmedLine.match(/^(\d+)\.\s+(.+)$/);
+    if (numberedMatch && parseInt(numberedMatch[1]) <= 20) {
+      checkPageBreak(12);
 
-    // EXPLICITLY set font properties for EVERY line to ensure consistency
-    if (isMainHeading) {
-      checkPageBreak(15);
-      yPosition += 5;
-      // Bold and blue for main headings only
+      // Draw number in a circle
+      doc.setFillColor(...colors.primary);
+      doc.circle(marginLeft + 4, yPosition - 2, 4, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(14, 165, 233); // Blue color
-    } else {
-      // ALL OTHER TEXT - explicitly reset to normal to prevent any italic/oblique rendering
+      doc.setFontSize(8);
+      doc.setTextColor(...colors.white);
+      doc.text(numberedMatch[1], marginLeft + 4, yPosition - 0.5, { align: 'center' });
+
+      // Render numbered item content
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.setTextColor(51, 65, 85); // Dark gray
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.text);
+
+      const itemText = numberedMatch[2];
+      const itemLines = doc.splitTextToSize(itemText, contentWidth - 15);
+
+      itemLines.forEach((itemLine, idx) => {
+        checkPageBreak();
+        if (idx === 0) {
+          doc.text(itemLine, marginLeft + 12, yPosition);
+        } else {
+          doc.text(itemLine, marginLeft + 12, yPosition);
+        }
+        yPosition += 5;
+      });
+      yPosition += 3;
+      return;
     }
 
-    // Split text to fit page width and render each line with same formatting
-    const splitText = doc.splitTextToSize(trimmedLine, pageWidth - 40);
-    splitText.forEach((textLine, index) => {
-      checkPageBreak();
-      // Re-apply font settings for each line segment to prevent style bleeding
-      if (isMainHeading) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.setTextColor(14, 165, 233);
-      } else {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(11);
-        doc.setTextColor(51, 65, 85);
-      }
-      doc.text(textLine, 20, yPosition);
-      yPosition += isMainHeading ? 7 : 5.5;
-    });
+    // Regular paragraph text
+    checkPageBreak(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...colors.text);
+
+    // Handle inline bold text
+    let processedLine = trimmedLine;
+
+    // Check if line contains bold markers
+    if (processedLine.includes('**')) {
+      // Split by bold markers and render each part
+      const parts = processedLine.split(/(\*\*[^*]+\*\*)/);
+      let currentX = marginLeft;
+
+      parts.forEach(part => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          // Bold text
+          doc.setFont('helvetica', 'bold');
+          const boldText = part.slice(2, -2);
+          doc.text(boldText, currentX, yPosition);
+          currentX += doc.getTextWidth(boldText);
+          doc.setFont('helvetica', 'normal');
+        } else if (part) {
+          // Check if text needs wrapping
+          const textWidth = doc.getTextWidth(part);
+          if (currentX + textWidth > pageWidth - marginRight) {
+            // Wrap to new line
+            const words = part.split(' ');
+            words.forEach((word, idx) => {
+              const wordWidth = doc.getTextWidth(word + ' ');
+              if (currentX + wordWidth > pageWidth - marginRight) {
+                yPosition += 5;
+                currentX = marginLeft;
+                checkPageBreak();
+              }
+              doc.text(word + (idx < words.length - 1 ? ' ' : ''), currentX, yPosition);
+              currentX += wordWidth;
+            });
+          } else {
+            doc.text(part, currentX, yPosition);
+            currentX += textWidth;
+          }
+        }
+      });
+      yPosition += 5;
+    } else {
+      // No bold - simple text wrap
+      const splitText = doc.splitTextToSize(processedLine, contentWidth);
+      splitText.forEach(textLine => {
+        checkPageBreak();
+        doc.text(textLine, marginLeft, yPosition);
+        yPosition += 5;
+      });
+    }
+    yPosition += 2;
   });
 
-  // Footer on last page
+  // ==================== PAGE NUMBERS & FOOTER ====================
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
+
+    // Footer line
+    doc.setDrawColor(...colors.muted);
+    doc.setLineWidth(0.3);
+    doc.line(marginLeft, pageHeight - 18, pageWidth - marginRight, pageHeight - 18);
+
+    // Page number
     doc.setFontSize(9);
-    doc.setTextColor(148, 163, 184);
+    doc.setTextColor(...colors.muted);
+    doc.setFont('helvetica', 'normal');
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    doc.text('PropertyEval - Confidential', pageWidth - 20, pageHeight - 10, { align: 'right' });
+
+    // Branding
+    doc.text('PropertyEval', marginLeft, pageHeight - 10);
+    doc.text('Confidential', pageWidth - marginRight, pageHeight - 10, { align: 'right' });
   }
 
   // Generate filename

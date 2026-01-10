@@ -540,14 +540,42 @@ export default function PropertyEvaluationPage() {
   // This is the SINGLE SOURCE OF TRUTH for comparable sales - no duplicate logic!
   const [historicSalesData, setHistoricSalesData] = useState<any[]>([]);
 
-  // Initialize selected comparables when property loads
+  // Map historicSalesData to ComparableProperty format for ValuationQuality
+  const comparablesForDisplay: ComparableProperty[] = historicSalesData.map(sale => ({
+    id: sale.id,
+    address: sale.address,
+    price: sale.price,
+    beds: sale.beds,
+    baths: sale.baths,
+    carpark: sale.cars,
+    property_type: sale.property_type,
+    sold_date: sale.sold_date,
+    distance_km: sale.distance,
+    similarity_score: sale.similarity,
+    source: 'homely.com.au',
+    land_size: sale.land_area,
+  }));
+
+  // Initialize selected comparables when historicSalesData loads
+  // If property has saved selections, use those; otherwise select all
   useEffect(() => {
-    if (property?.selected_comparables) {
-      setSelectedComparableIds(property.selected_comparables);
-    } else if (property?.comparables_data?.comparable_sold) {
-      setSelectedComparableIds(property.comparables_data.comparable_sold.map((c: any) => c.id));
+    if (historicSalesData.length > 0) {
+      if (property?.selected_comparables && property.selected_comparables.length > 0) {
+        // Use saved selections, but only include IDs that exist in current historicSalesData
+        const validIds = historicSalesData.map(s => s.id);
+        const validSelections = property.selected_comparables.filter((id: string) => validIds.includes(id));
+        if (validSelections.length > 0) {
+          setSelectedComparableIds(validSelections);
+        } else {
+          // Saved selections are stale, select all
+          setSelectedComparableIds(validIds);
+        }
+      } else {
+        // No saved selections, select all by default
+        setSelectedComparableIds(historicSalesData.map(s => s.id));
+      }
     }
-  }, [property?.selected_comparables, property?.comparables_data]);
+  }, [historicSalesData, property?.selected_comparables]);
 
   const handleComparableToggle = (id: string) => {
     setSelectedComparableIds(prev =>
@@ -560,11 +588,15 @@ export default function PropertyEvaluationPage() {
     setError(null);
 
     try {
-      // Use local Next.js API route directly (not through proxy)
+      // Pass both selected IDs and the full historicSalesData
+      // This ensures recalculate doesn't rely on stored (possibly filtered) data
       const response = await fetch(`/api/properties/${propertyId}/recalculate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ selected_comparable_ids: selectedIds }),
+        body: JSON.stringify({
+          selected_comparable_ids: selectedIds,
+          all_comparables: historicSalesData, // Full list from cache
+        }),
       });
 
       if (!response.ok) {
@@ -573,6 +605,9 @@ export default function PropertyEvaluationPage() {
       }
 
       const data = await response.json();
+
+      // Update property state but DON'T overwrite historicSalesData
+      // The UI will continue to show the full list from historicSalesData
       setProperty((prev) =>
         prev
           ? {
@@ -623,6 +658,8 @@ export default function PropertyEvaluationPage() {
     setEvaluating(true);
     setError(null);
     setWarning(null);
+    // Clear displayed estimate so we don't show stale values during evaluation
+    setDisplayedEstimate(null);
 
     // For Homely source, check that historic sales data is available
     if (source === 'homely') {
@@ -691,8 +728,17 @@ export default function PropertyEvaluationPage() {
 
       console.log('[Evaluation] Setting displayedEstimate to:', newEstimatedValueRange);
 
+      // If extraction failed, use the valuation_history from the API
+      if (!newEstimatedValueRange || newEstimatedValueRange === 'N/A') {
+        const latestValuation = data.valuation_history?.[0];
+        if (latestValuation?.value_low && latestValuation?.value_high) {
+          newEstimatedValueRange = `$${latestValuation.value_low.toLocaleString()} - $${latestValuation.value_high.toLocaleString()}`;
+          console.log('[Evaluation] Using valuation_history fallback:', newEstimatedValueRange);
+        }
+      }
+
       // Update the displayed estimate in yellow box
-      if (newEstimatedValueRange) {
+      if (newEstimatedValueRange && newEstimatedValueRange !== 'N/A') {
         setDisplayedEstimate(newEstimatedValueRange);
       }
 
@@ -1351,7 +1397,7 @@ export default function PropertyEvaluationPage() {
                 lineHeight: '1.5'
               }}>
                 {evaluating
-                  ? 'Analyzing comparables and generating AI valuation report...'
+                  ? 'Analysing comparables and generating AI valuation report...'
                   : 'Updating valuation with selected comparables...'}
               </p>
               <p style={{
@@ -2500,7 +2546,7 @@ export default function PropertyEvaluationPage() {
                 valuationHistory={property.valuation_history}
                 confidenceScoring={property.confidence_scoring}
                 suburbTrends={property.suburb_trends}
-                comparables={property.comparables_data?.comparable_sold}
+                comparables={comparablesForDisplay.length > 0 ? comparablesForDisplay : property.comparables_data?.comparable_sold}
                 selectedComparables={selectedComparableIds}
                 onComparableToggle={handleComparableToggle}
                 onRecalculate={handleRecalculate}

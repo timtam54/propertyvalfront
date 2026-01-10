@@ -8,16 +8,18 @@ interface RouteParams {
 
 /**
  * POST - Recalculate property valuation with selected comparables
- * This endpoint filters the existing comparables to the selected ones and re-runs evaluation
+ * Uses all_comparables passed from frontend (from cache) to avoid relying on stored data
+ * which may have been filtered from a previous recalculation
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const resolvedParams = await params;
     const propertyId = resolvedParams.propertyId;
 
-    // Get selected comparable IDs from request body
+    // Get selected comparable IDs and full comparables list from request body
     const body = await request.json();
     const selectedComparableIds: string[] = body.selected_comparable_ids || [];
+    const allComparables: any[] = body.all_comparables || [];
 
     if (selectedComparableIds.length === 0) {
       return NextResponse.json(
@@ -26,7 +28,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Fetch the property to get existing comparables data
+    // Fetch the property (needed for property details, not comparables)
     console.log(`[Recalculate] Fetching property ${propertyId}...`);
     const propertyResponse = await fetch(`${BACKEND_URL}/api/properties/${propertyId}`);
 
@@ -36,10 +38,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const property = await propertyResponse.json();
 
-    // Get existing comparables from the property
-    const existingComparables = property.comparables_data?.comparable_sold || [];
+    // Use all_comparables from frontend if provided, otherwise fall back to stored data
+    let sourceComparables = allComparables;
+    if (sourceComparables.length === 0) {
+      // Fallback to stored comparables if frontend didn't send the full list
+      sourceComparables = property.comparables_data?.comparable_sold || [];
+      console.log(`[Recalculate] Using stored comparables (${sourceComparables.length}) as fallback`);
+    } else {
+      console.log(`[Recalculate] Using ${sourceComparables.length} comparables from frontend cache`);
+    }
 
-    if (existingComparables.length === 0) {
+    if (sourceComparables.length === 0) {
       return NextResponse.json(
         { detail: 'No comparable data found. Please run an evaluation first.' },
         { status: 400 }
@@ -47,36 +56,38 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Filter to only selected comparables
-    const selectedComparables = existingComparables.filter((c: any) =>
+    const selectedComparables = sourceComparables.filter((c: any) =>
       selectedComparableIds.includes(c.id)
     );
 
     if (selectedComparables.length === 0) {
       return NextResponse.json(
-        { detail: 'None of the selected comparable IDs match existing comparables.' },
+        { detail: 'None of the selected comparable IDs match available comparables.' },
         { status: 400 }
       );
     }
 
-    console.log(`[Recalculate] Using ${selectedComparables.length} of ${existingComparables.length} comparables`);
+    console.log(`[Recalculate] Using ${selectedComparables.length} of ${sourceComparables.length} comparables`);
 
     // Transform comparables to the format expected by evaluate endpoint
+    // Handle both formats: from frontend cache (cars, land_area, similarity, distance)
+    // and from stored data (carpark, land_area, similarity_score, distance_km)
     const historicSales = selectedComparables.map((c: any) => ({
       id: c.id,
       address: c.address,
       price: c.price,
       beds: c.beds,
       baths: c.baths,
-      cars: c.carpark,
+      cars: c.cars ?? c.carpark,
       land_area: c.land_area,
       property_type: c.property_type,
       sold_date: c.sold_date,
       sold_date_raw: c.sold_date_raw,
-      source: c.source,
-      similarity: c.similarity_score,
+      source: c.source || 'homely.com.au',
+      similarity: c.similarity ?? c.similarity_score,
       latitude: c.latitude,
       longitude: c.longitude,
-      distance: c.distance_km,
+      distance: c.distance ?? c.distance_km,
     }));
 
     // Call the evaluate endpoint with the filtered comparables

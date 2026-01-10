@@ -1237,8 +1237,21 @@ ${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis secti
     let userContent: MessageContent;
 
     if (property.images && property.images.length > 0) {
+      // Filter to only OpenAI-supported image formats (png, jpeg, jpg, gif, webp)
+      // HEIC, TIFF, BMP, SVG etc are NOT supported
+      const supportedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+      const supportedImages = property.images.filter(url => {
+        const lowerUrl = url.toLowerCase();
+        return supportedExtensions.some(ext => lowerUrl.endsWith(ext));
+      });
+
+      if (supportedImages.length < property.images.length) {
+        const skipped = property.images.length - supportedImages.length;
+        console.log(`[Evaluate] Skipping ${skipped} unsupported image(s) (only png/jpg/gif/webp allowed)`);
+      }
+
       // Use vision mode with images
-      const imageContents: Array<{ type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }> = property.images
+      const imageContents: Array<{ type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }> = supportedImages
         .slice(0, 10) // Limit to 10 images to manage token costs
         .map(url => ({
           type: 'image_url' as const,

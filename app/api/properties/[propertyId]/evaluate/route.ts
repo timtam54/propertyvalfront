@@ -1303,52 +1303,52 @@ ${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis secti
     // Calculate confidence scoring
     const confidenceScoring = calculateConfidenceScoring(comparables, property);
 
-    // Extract the AI's estimated value range from the report (Section 6 or "Estimated Value Range")
+    // Extract the AI's estimated value range from the "## X. Estimated Value Range" section ONLY
+    // Must target the markdown section header specifically to avoid matching RP Data or other values
     let estimatedValue: number;
     let valueLow: number;
     let valueHigh: number;
     let valuationBasis: string;
 
-    // Try to extract the value range from the AI's response
-    // Look for patterns like "$1,100,000 to $1,150,000" or "$1,100,000 - $1,150,000" or "$1,100,000 and $1,150,000"
-    const rangeMatch = evaluationReport.match(/estimated value range[^$]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–|and)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
+    // PRIMARY: Find "## X. Estimated Value Range" section, then find "estimated value range" text within it
+    // and extract the dollar values that follow
+    const sectionMatch = evaluationReport.match(/##\s*\d+\.?\s*Estimated Value Range\s*\n([\s\S]*?)(?=##|$)/i);
+
+    let rangeMatch = null;
+    if (sectionMatch) {
+      const sectionContent = sectionMatch[1];
+      // Find "estimated value range" text and extract the dollars that follow it
+      rangeMatch = sectionContent.match(/estimated value range[^$]*\$\s*([\d,]+)\s*(?:to|-|–|and)\s*\$\s*([\d,]+)/i);
+      if (rangeMatch) {
+        console.log(`[Evaluate] Found range after 'estimated value range' in section: $${rangeMatch[1]} - $${rangeMatch[2]}`);
+      }
+    }
 
     if (rangeMatch) {
       valueLow = parseInt(rangeMatch[1].replace(/,/g, ''));
       valueHigh = parseInt(rangeMatch[2].replace(/,/g, ''));
       estimatedValue = Math.round((valueLow + valueHigh) / 2);
       valuationBasis = 'AI valuation with adjustments';
-      console.log(`[Evaluate] Extracted AI range: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
+      console.log(`[Evaluate] Extracted from section: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
     } else {
-      // Fallback: Try to find any dollar range in the Estimated Value Range section (any section number)
-      const sectionMatch = evaluationReport.match(/##\s*\d+\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+(?:\.\d+)?)\s*(?:to|-|–|and)\s*\$\s*([\d,]+(?:\.\d+)?)/i);
-
-      if (sectionMatch) {
-        valueLow = parseInt(sectionMatch[1].replace(/,/g, ''));
-        valueHigh = parseInt(sectionMatch[2].replace(/,/g, ''));
-        estimatedValue = Math.round((valueLow + valueHigh) / 2);
-        valuationBasis = 'AI valuation with adjustments';
-        console.log(`[Evaluate] Extracted from section: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
+      // Final fallback: use comparable-based calculation
+      if (exactMatches.length > 0) {
+        const exactPrices = exactMatches.map(e => e.price);
+        estimatedValue = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
+        valuationBasis = `Average of ${exactMatches.length} exact ${property.beds}bed/${property.baths}bath matches`;
+        console.log(`[Evaluate] Fallback to EXACT MATCH average: $${estimatedValue}`);
+      } else if (bestMatch) {
+        estimatedValue = bestMatch.price;
+        valuationBasis = `Best match: ${bestMatch.beds}bed/${bestMatch.baths}bath at ${bestMatch.address}`;
+        console.log(`[Evaluate] Fallback to BEST MATCH price: $${estimatedValue}`);
       } else {
-        // Final fallback: use comparable-based calculation
-        if (exactMatches.length > 0) {
-          const exactPrices = exactMatches.map(e => e.price);
-          estimatedValue = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
-          valuationBasis = `Average of ${exactMatches.length} exact ${property.beds}bed/${property.baths}bath matches`;
-          console.log(`[Evaluate] Fallback to EXACT MATCH average: $${estimatedValue}`);
-        } else if (bestMatch) {
-          estimatedValue = bestMatch.price;
-          valuationBasis = `Best match: ${bestMatch.beds}bed/${bestMatch.baths}bath at ${bestMatch.address}`;
-          console.log(`[Evaluate] Fallback to BEST MATCH price: $${estimatedValue}`);
-        } else {
-          estimatedValue = stats.weightedAvg || stats.median || stats.avg || 0;
-          valuationBasis = 'Weighted average of available comparables';
-          console.log(`[Evaluate] Fallback to WEIGHTED AVERAGE: $${estimatedValue}`);
-        }
-        const valueRange = estimatedValue * 0.1;
-        valueLow = Math.round(estimatedValue - valueRange);
-        valueHigh = Math.round(estimatedValue + valueRange);
+        estimatedValue = stats.weightedAvg || stats.median || stats.avg || 0;
+        valuationBasis = 'Weighted average of available comparables';
+        console.log(`[Evaluate] Fallback to WEIGHTED AVERAGE: $${estimatedValue}`);
       }
+      const valueRange = estimatedValue * 0.1;
+      valueLow = Math.round(estimatedValue - valueRange);
+      valueHigh = Math.round(estimatedValue + valueRange);
     }
 
     console.log(`[Evaluate] Final valuation: $${valueLow} - $${valueHigh} (${valuationBasis})`);

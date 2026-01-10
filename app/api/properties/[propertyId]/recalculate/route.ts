@@ -91,17 +91,46 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }));
 
     // Call the evaluate endpoint with the filtered comparables
-    const evaluateUrl = `${request.nextUrl.origin}/api/properties/${propertyId}/evaluate`;
+    // In production (Azure), request.nextUrl.origin can be unreliable (returns localhost)
+    // Priority: 1) NEXT_PUBLIC_APP_URL env var, 2) host header, 3) hardcoded production URL
+    const host = request.headers.get('host');
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+
+    let baseUrl: string;
+    if (process.env.NEXT_PUBLIC_APP_URL) {
+      baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    } else if (host && !host.includes('localhost')) {
+      baseUrl = `${protocol}://${host}`;
+    } else {
+      // Hardcoded fallback for production
+      baseUrl = 'https://propertyeval.com.au';
+    }
+
+    const evaluateUrl = `${baseUrl}/api/properties/${propertyId}/evaluate`;
     console.log(`[Recalculate] Calling evaluate endpoint: ${evaluateUrl}`);
 
-    const evaluateResponse = await fetch(evaluateUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        historicSales,
-        evaluationSource: 'homely'
-      }),
-    });
+    let evaluateResponse;
+    try {
+      evaluateResponse = await fetch(evaluateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Forward headers to help with internal routing
+          'x-forwarded-host': host || '',
+          'x-forwarded-proto': protocol,
+        },
+        body: JSON.stringify({
+          historicSales,
+          evaluationSource: 'homely'
+        }),
+      });
+    } catch (fetchError) {
+      console.error(`[Recalculate] Fetch to evaluate endpoint failed:`, fetchError);
+      console.error(`[Recalculate] Attempted URL: ${evaluateUrl}`);
+      console.error(`[Recalculate] Host header: ${host}`);
+      console.error(`[Recalculate] Protocol: ${protocol}`);
+      throw new Error(`Failed to reach evaluate endpoint at ${evaluateUrl}`);
+    }
 
     if (!evaluateResponse.ok) {
       const errorData = await evaluateResponse.json();

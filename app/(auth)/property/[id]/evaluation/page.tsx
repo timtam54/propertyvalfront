@@ -190,22 +190,21 @@ export default function PropertyEvaluationPage() {
     return 'N/A';
   };
 
-  // Helper function to extract Homely estimate from "Estimated Value Range" section
-  // Accepts optional report parameter for use after evaluation (before state updates)
+  // Helper function to extract Homely estimate from "## X. Estimated Value Range" section
+  // First finds the section, then extracts value after "estimated value range" text within it
   const extractHomelyEstimate = (report?: string): string => {
     const evalReport = report || property?.evaluation_report;
     if (!evalReport) return 'N/A';
 
-    // Find any section number (4, 5, 6, 7, etc.) "Estimated Value Range" and extract the dollar range
-    const sectionMatch = evalReport.match(/##\s*\d+\.?\s*Estimated Value Range[\s\S]*?\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
+    // Step 1: Find the "## X. Estimated Value Range" section
+    const sectionMatch = evalReport.match(/##\s*\d+\.?\s*Estimated Value Range\s*\n([\s\S]*?)(?=##|$)/i);
     if (sectionMatch) {
-      return `$${sectionMatch[1]} - $${sectionMatch[2]}`;
-    }
-
-    // Fallback: look for "estimated value range" with dollar amounts anywhere
-    const rangeMatch = evalReport.match(/estimated value range[^$]*\$\s*([\d,]+)[^\d]*(?:to|and|-|–)[^\d]*\$\s*([\d,]+)/i);
-    if (rangeMatch) {
-      return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
+      const sectionContent = sectionMatch[1];
+      // Step 2: Find "estimated value range" text and extract the dollars that follow
+      const rangeMatch = sectionContent.match(/estimated value range[^$]*\$\s*([\d,]+)\s*(?:to|-|–|and)\s*\$\s*([\d,]+)/i);
+      if (rangeMatch) {
+        return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
+      }
     }
 
     return 'N/A';
@@ -606,6 +605,20 @@ export default function PropertyEvaluationPage() {
 
       const data = await response.json();
 
+      // Extract the new estimated value range from valuation_history (PRIMARY)
+      // This comes from the "## X. Estimated Value Range" section in the AI report
+      let newEstimatedValueRange: string | null = null;
+      const latestValuation = data.valuation_history?.[0];
+      if (latestValuation?.value_low && latestValuation?.value_high) {
+        newEstimatedValueRange = `$${latestValuation.value_low.toLocaleString()} - $${latestValuation.value_high.toLocaleString()}`;
+        console.log('[Recalculate] Extracted value range from valuation_history:', newEstimatedValueRange);
+      }
+
+      // CRITICAL: Update displayedEstimate to show the new value in the header
+      if (newEstimatedValueRange) {
+        setDisplayedEstimate(newEstimatedValueRange);
+      }
+
       // Update property state but DON'T overwrite historicSalesData
       // The UI will continue to show the full list from historicSalesData
       setProperty((prev) =>
@@ -618,6 +631,7 @@ export default function PropertyEvaluationPage() {
               valuation_history: data.valuation_history,
               selected_comparables: selectedIds,
               evaluation_date: new Date().toISOString(),
+              estimated_value_range: newEstimatedValueRange || prev.estimated_value_range,
             }
           : null
       );
@@ -710,32 +724,33 @@ export default function PropertyEvaluationPage() {
         setWarning(data.domain_api_error);
       }
 
-      // Calculate the new estimated value range based on selected source
+      // Get the estimated value range from valuation_history (PRIMARY source)
+      // This is already correctly extracted from the "Estimated Value Range" section by the API
+      // Using this ensures consistency between header display and report content
       let newEstimatedValueRange: string | null = null;
 
       console.log('[Evaluation] Source selected:', source);
       console.log('[Evaluation] valuation_history from API:', data.valuation_history);
 
-      if (source === 'homely') {
-        // Use the same function as the Homely button
-        newEstimatedValueRange = extractHomelyEstimate(data.evaluation_report);
-        console.log('[Evaluation] Homely range:', newEstimatedValueRange);
-      } else {
-        // Use the same function as the RP Data button
-        newEstimatedValueRange = extractRpDataEstimate(data.evaluation_report, property?.rp_data_report || undefined);
-        console.log('[Evaluation] RP Data range:', newEstimatedValueRange);
+      // PRIMARY: Use valuation_history values (authoritative source from API)
+      const latestValuation = data.valuation_history?.[0];
+      if (latestValuation?.value_low && latestValuation?.value_high) {
+        newEstimatedValueRange = `$${latestValuation.value_low.toLocaleString()} - $${latestValuation.value_high.toLocaleString()}`;
+        console.log('[Evaluation] Using valuation_history (primary):', newEstimatedValueRange);
+      }
+
+      // FALLBACK: Extract from report text only if valuation_history is not available
+      if (!newEstimatedValueRange || newEstimatedValueRange === 'N/A') {
+        if (source === 'homely') {
+          newEstimatedValueRange = extractHomelyEstimate(data.evaluation_report);
+          console.log('[Evaluation] Homely range (fallback):', newEstimatedValueRange);
+        } else {
+          newEstimatedValueRange = extractRpDataEstimate(data.evaluation_report, property?.rp_data_report || undefined);
+          console.log('[Evaluation] RP Data range (fallback):', newEstimatedValueRange);
+        }
       }
 
       console.log('[Evaluation] Setting displayedEstimate to:', newEstimatedValueRange);
-
-      // If extraction failed, use the valuation_history from the API
-      if (!newEstimatedValueRange || newEstimatedValueRange === 'N/A') {
-        const latestValuation = data.valuation_history?.[0];
-        if (latestValuation?.value_low && latestValuation?.value_high) {
-          newEstimatedValueRange = `$${latestValuation.value_low.toLocaleString()} - $${latestValuation.value_high.toLocaleString()}`;
-          console.log('[Evaluation] Using valuation_history fallback:', newEstimatedValueRange);
-        }
-      }
 
       // Update the displayed estimate in yellow box
       if (newEstimatedValueRange && newEstimatedValueRange !== 'N/A') {

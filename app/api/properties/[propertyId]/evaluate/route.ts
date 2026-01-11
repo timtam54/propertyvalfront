@@ -1229,7 +1229,29 @@ ${maxReasonableValue > 0 ? `Remember: Maximum reasonable value is ${formatPrice(
 
 ## 6. Key Factors Affecting Value`}`}
 
-${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis section MUST include the EXACT addresses from the Historic Property Sales Data above. If you cannot find the data, state "Data unavailable" - NEVER invent addresses.` : ''}`;
+${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis section MUST include the EXACT addresses from the Historic Property Sales Data above. If you cannot find the data, state "Data unavailable" - NEVER invent addresses.` : ''}
+
+═══════════════════════════════════════════════════════════════
+⚠️⚠️⚠️ MANDATORY JSON OUTPUT - YOU MUST INCLUDE THIS AT THE END ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════
+
+After your report, you MUST include a JSON block in this EXACT format:
+
+\`\`\`json
+{"value_low": 500000, "value_high": 520000}
+\`\`\`
+
+Rules for the JSON block:
+- value_low = your lower estimate as an INTEGER (no commas, no dollar signs, no quotes)
+- value_high = your higher estimate as an INTEGER (no commas, no dollar signs, no quotes)
+- Must be valid JSON - use double quotes for keys
+- Must come AFTER all your report text
+- This JSON is how your valuation gets recorded in the system
+
+Example: If your estimated range is $500,000 - $520,000, include:
+\`\`\`json
+{"value_low": 500000, "value_high": 520000}
+\`\`\``;
 
     // Build user message content - text + images if available
     type MessageContent = string | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'low' | 'high' | 'auto' } }>;
@@ -1298,40 +1320,99 @@ ${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis secti
       throw openaiError;
     }
 
-    const evaluationReport = completion.choices[0]?.message?.content || 'Unable to generate evaluation.';
+    const fullResponse = completion.choices[0]?.message?.content || 'Unable to generate evaluation.';
 
     // Calculate confidence scoring
     const confidenceScoring = calculateConfidenceScoring(comparables, property);
 
-    // Extract the AI's estimated value range from the "## X. Estimated Value Range" section ONLY
-    // Must target the markdown section header specifically to avoid matching RP Data or other values
-    let estimatedValue: number;
-    let valueLow: number;
-    let valueHigh: number;
-    let valuationBasis: string;
+    // Extract the JSON block from the report (should be at the end)
+    // Pattern: ```json ... ``` or just {...}
+    let estimatedValue: number = 0;
+    let valueLow: number = 0;
+    let valueHigh: number = 0;
+    let valuationBasis: string = 'AI valuation';
+    let evaluationReport = fullResponse;
 
-    // PRIMARY: Find "## X. Estimated Value Range" section, then find "estimated value range" text within it
-    // and extract the dollar values that follow
-    const sectionMatch = evaluationReport.match(/##\s*\d+\.?\s*Estimated Value Range\s*\n([\s\S]*?)(?=##|$)/i);
+    // STEP 1: Try to extract JSON block from the AI response (most reliable)
+    const jsonBlockMatch = fullResponse.match(/```json\s*\n?\s*(\{[^}]+\})\s*\n?\s*```/);
+    const inlineJsonMatch = fullResponse.match(/\{"value_low"\s*:\s*(\d+)\s*,\s*"value_high"\s*:\s*(\d+)\s*\}/);
 
-    let rangeMatch = null;
-    if (sectionMatch) {
-      const sectionContent = sectionMatch[1];
-      // Find "estimated value range" text and extract the dollars that follow it
-      rangeMatch = sectionContent.match(/estimated value range[^$]*\$\s*([\d,]+)\s*(?:to|-|–|and)\s*\$\s*([\d,]+)/i);
-      if (rangeMatch) {
-        console.log(`[Evaluate] Found range after 'estimated value range' in section: $${rangeMatch[1]} - $${rangeMatch[2]}`);
+    let jsonExtracted = false;
+
+    if (jsonBlockMatch) {
+      try {
+        const jsonData = JSON.parse(jsonBlockMatch[1]);
+        if (jsonData.value_low && jsonData.value_high) {
+          valueLow = jsonData.value_low;
+          valueHigh = jsonData.value_high;
+          estimatedValue = Math.round((valueLow + valueHigh) / 2);
+          valuationBasis = 'AI valuation with adjustments';
+          jsonExtracted = true;
+          console.log(`[Evaluate] ✓ Extracted from JSON block: $${valueLow.toLocaleString()} - $${valueHigh.toLocaleString()}`);
+          // Remove the JSON block from the report text
+          evaluationReport = fullResponse.replace(/```json\s*\n?\s*\{[^}]+\}\s*\n?\s*```/g, '').trim();
+        }
+      } catch (e) {
+        console.log(`[Evaluate] JSON block parse failed:`, e);
+      }
+    } else if (inlineJsonMatch) {
+      valueLow = parseInt(inlineJsonMatch[1]);
+      valueHigh = parseInt(inlineJsonMatch[2]);
+      estimatedValue = Math.round((valueLow + valueHigh) / 2);
+      valuationBasis = 'AI valuation with adjustments';
+      jsonExtracted = true;
+      console.log(`[Evaluate] ✓ Extracted from inline JSON: $${valueLow.toLocaleString()} - $${valueHigh.toLocaleString()}`);
+      // Remove the inline JSON from the report text
+      evaluationReport = fullResponse.replace(/\{"value_low"\s*:\s*\d+\s*,\s*"value_high"\s*:\s*\d+\s*\}/g, '').trim();
+    }
+
+    // STEP 2: If JSON extraction failed, make a separate extraction API call (fallback)
+    if (!jsonExtracted) {
+      console.log(`[Evaluate] No JSON block found in response, making extraction API call...`);
+
+      try {
+        const extractionCompletion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Extract the estimated property value range from this valuation report.
+Return ONLY valid JSON: {"value_low": 500000, "value_high": 520000}
+- value_low and value_high must be integers (no commas, no dollar signs)
+- Look for "Estimated Value Range", "Low Estimate", "High Estimate", or dollar ranges`
+            },
+            {
+              role: 'user',
+              content: evaluationReport
+            }
+          ],
+          temperature: 0,
+          max_tokens: 100,
+          response_format: { type: 'json_object' }
+        });
+
+        const extractedJson = JSON.parse(extractionCompletion.choices[0]?.message?.content || '{}');
+
+        if (extractedJson.value_low && extractedJson.value_high) {
+          valueLow = extractedJson.value_low;
+          valueHigh = extractedJson.value_high;
+          estimatedValue = Math.round((valueLow + valueHigh) / 2);
+          valuationBasis = 'AI valuation with adjustments';
+          jsonExtracted = true;
+          console.log(`[Evaluate] ✓ Extraction API successful: $${valueLow.toLocaleString()} - $${valueHigh.toLocaleString()}`);
+        } else {
+          throw new Error('Extraction returned incomplete data');
+        }
+      } catch (extractionError) {
+        console.log(`[Evaluate] Extraction API failed, using comparables fallback:`, extractionError);
       }
     }
 
-    if (rangeMatch) {
-      valueLow = parseInt(rangeMatch[1].replace(/,/g, ''));
-      valueHigh = parseInt(rangeMatch[2].replace(/,/g, ''));
-      estimatedValue = Math.round((valueLow + valueHigh) / 2);
-      valuationBasis = 'AI valuation with adjustments';
-      console.log(`[Evaluate] Extracted from section: $${valueLow} - $${valueHigh} (mid: $${estimatedValue})`);
-    } else {
-      // Final fallback: use comparable-based calculation
+    // STEP 3: Final fallback - use comparable-based calculation
+    if (!jsonExtracted) {
+      console.log(`[Evaluate] Using comparable-based fallback...`);
+
+      // Fallback: use comparable-based calculation
       if (exactMatches.length > 0) {
         const exactPrices = exactMatches.map(e => e.price);
         estimatedValue = Math.round(exactPrices.reduce((a, b) => a + b, 0) / exactPrices.length);
@@ -1351,7 +1432,7 @@ ${!usingReportsAsPrimary ? `⚠️ CRITICAL REMINDER: Your Market Analysis secti
       valueHigh = Math.round(estimatedValue + valueRange);
     }
 
-    console.log(`[Evaluate] Final valuation: $${valueLow} - $${valueHigh} (${valuationBasis})`);
+    console.log(`[Evaluate] Final valuation: $${valueLow.toLocaleString()} - $${valueHigh.toLocaleString()} (${valuationBasis})`);
     const valuationEntry: ValuationHistoryEntry = {
       date: new Date().toISOString(),
       estimated_value: estimatedValue,

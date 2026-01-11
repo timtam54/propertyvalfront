@@ -191,7 +191,7 @@ export default function PropertyEvaluationPage() {
   };
 
   // Helper function to extract Homely estimate from "## X. Estimated Value Range" section
-  // First finds the section, then extracts value after "estimated value range" text within it
+  // Uses multiple patterns to handle different AI output formats
   const extractHomelyEstimate = (report?: string): string => {
     const evalReport = report || property?.evaluation_report;
     if (!evalReport) return 'N/A';
@@ -200,8 +200,22 @@ export default function PropertyEvaluationPage() {
     const sectionMatch = evalReport.match(/##\s*\d+\.?\s*Estimated Value Range\s*\n([\s\S]*?)(?=##|$)/i);
     if (sectionMatch) {
       const sectionContent = sectionMatch[1];
-      // Step 2: Find "estimated value range" text and extract the dollars that follow
-      const rangeMatch = sectionContent.match(/estimated value range[^$]*\$\s*([\d,]+)\s*(?:to|-|–|and)\s*\$\s*([\d,]+)/i);
+
+      // Pattern 1: "estimated value range: $X - $Y" or "$X to $Y"
+      let rangeMatch = sectionContent.match(/estimated value range[^$]*\$\s*([\d,]+)\s*(?:to|-|–|and)\s*\$\s*([\d,]+)/i);
+      if (rangeMatch) {
+        return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
+      }
+
+      // Pattern 2: "Low Estimate: $X" and "High Estimate: $Y" (separate lines)
+      const lowMatch = sectionContent.match(/low\s*estimate[:\s]*\$\s*([\d,]+)/i);
+      const highMatch = sectionContent.match(/high\s*estimate[:\s]*\$\s*([\d,]+)/i);
+      if (lowMatch && highMatch) {
+        return `$${lowMatch[1]} - $${highMatch[1]}`;
+      }
+
+      // Pattern 3: Just two dollar amounts in sequence "$X - $Y" or "$X to $Y"
+      rangeMatch = sectionContent.match(/\$\s*([\d,]+)\s*(?:to|-|–)\s*\$\s*([\d,]+)/i);
       if (rangeMatch) {
         return `$${rangeMatch[1]} - $${rangeMatch[2]}`;
       }

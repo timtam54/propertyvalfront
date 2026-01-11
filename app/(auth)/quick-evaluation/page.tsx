@@ -355,7 +355,7 @@ export default function QuickEvaluationPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)' }}>
       {/* Header */}
-      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50" style={{ padding: '0.75rem 0' }}>
+      <header className="bg-gradient-to-r from-slate-900 to-slate-800 dark:from-gray-800 dark:to-gray-800 border-b border-slate-700 dark:border-gray-700 sticky top-0 z-50" style={{ padding: '0.75rem 0' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Home className="text-white dark:text-cyan-500" size={28} />
           <h1 style={{ fontSize: '1.25rem', fontWeight: 800 }}><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></h1>

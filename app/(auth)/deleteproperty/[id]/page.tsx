@@ -423,7 +423,7 @@ export default function PropertyDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-50 dark:from-gray-900 dark:to-gray-800 transition-colors">
       {/* Header */}
-      <header className="bg-gradient-to-r from-cyan-600 to-blue-600 dark:from-gray-800 dark:to-gray-800 border-b border-cyan-700 dark:border-gray-700 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-slate-900 to-slate-800 dark:from-gray-800 dark:to-gray-800 border-b border-slate-700 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Home className="text-white dark:text-cyan-500" size={24} />

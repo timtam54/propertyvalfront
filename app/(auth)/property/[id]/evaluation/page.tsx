@@ -1662,7 +1662,7 @@ export default function PropertyEvaluationPage() {
       )}
 
       {/* Header */}
-      <header className="bg-gradient-to-r from-slate-900 to-slate-800 dark:from-gray-800 dark:to-gray-800 border-b border-slate-700 dark:border-gray-700 sticky top-0 z-50">
+      <header className="bg-gradient-to-r from-blue-700 to-blue-900 dark:from-gray-800 dark:to-gray-900 border-b border-blue-800 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Home className="text-white dark:text-cyan-500" size={24} />

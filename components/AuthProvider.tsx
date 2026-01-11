@@ -112,6 +112,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (googleUser) {
       localStorage.setItem("googleUser", JSON.stringify(googleUser));
+      // Set the sign-in flag and provider info
+      localStorage.setItem("HasSigninToPropertyEval", "true");
+      localStorage.setItem("PropertyEvalAuthProvider", "google");
+      localStorage.setItem("PropertyEvalUserEmail", googleUser.email);
     }
   }, [googleUser]);
 
@@ -140,6 +144,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
           if (email && msalSyncedRef.current !== email) {
             msalSyncedRef.current = email;
             syncOAuthUser(email, name, 'microsoft');
+            // Set the sign-in flag and provider info
+            localStorage.setItem("HasSigninToPropertyEval", "true");
+            localStorage.setItem("PropertyEvalAuthProvider", "microsoft");
+            localStorage.setItem("PropertyEvalUserEmail", email);
           }
         }
       }).catch((error) => {
@@ -159,6 +167,10 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
             if (email && msalSyncedRef.current !== email) {
               msalSyncedRef.current = email;
               syncOAuthUser(email, name, 'microsoft');
+              // Set the sign-in flag and provider info
+              localStorage.setItem("HasSigninToPropertyEval", "true");
+              localStorage.setItem("PropertyEvalAuthProvider", "microsoft");
+              localStorage.setItem("PropertyEvalUserEmail", email);
             }
           }
         }

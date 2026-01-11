@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { GoogleLogin, CredentialResponse } from "@react-oauth/google";
-import { Building2 } from "lucide-react";
+import { Building2, Home } from "lucide-react";
 import { loginRequest } from "@/lib/msalConfig";
 import { useMsalSafe, useIsAuthenticatedSafe, useGoogleAuth } from "@/components/AuthProvider";
 import { toast } from "sonner";
 import { API } from "@/lib/config";
+import Link from "next/link";
 
 // Decode JWT token to get user info
 function decodeJwt(token: string) {
@@ -33,12 +34,58 @@ export default function Login() {
   const isMsalAuthenticated = useIsAuthenticatedSafe();
   const { isGoogleAuthenticated, setGoogleUser } = useGoogleAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [attemptingSilentLogin, setAttemptingSilentLogin] = useState(false);
+  const [isReturningGoogleUser, setIsReturningGoogleUser] = useState(false);
+  const silentLoginAttemptedRef = useRef(false);
+
+  // Check if returning Google user on mount
+  useEffect(() => {
+    const provider = localStorage.getItem("PropertyEvalAuthProvider");
+    if (provider === "google") {
+      setIsReturningGoogleUser(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (isMsalAuthenticated || isGoogleAuthenticated) {
       router.push("/properties");
     }
   }, [isMsalAuthenticated, isGoogleAuthenticated, router]);
+
+  // Attempt silent login for returning users
+  useEffect(() => {
+    if (silentLoginAttemptedRef.current) return;
+
+    const hasSignedIn = localStorage.getItem("HasSigninToPropertyEval");
+    const provider = localStorage.getItem("PropertyEvalAuthProvider");
+    const email = localStorage.getItem("PropertyEvalUserEmail");
+
+    if (hasSignedIn === "true" && provider && email) {
+      silentLoginAttemptedRef.current = true;
+
+      if (provider === "microsoft" && instance) {
+        // Attempt silent Microsoft login
+        setAttemptingSilentLogin(true);
+        instance.ssoSilent({
+          scopes: ["User.Read"],
+          loginHint: email
+        }).then((response) => {
+          if (response && response.account) {
+            instance.setActiveAccount(response.account);
+            toast.success(`Welcome back, ${response.account.name || email}!`);
+            router.push("/properties");
+          }
+        }).catch((error) => {
+          console.log("Silent Microsoft login failed, showing login options:", error);
+          setAttemptingSilentLogin(false);
+        });
+      } else if (provider === "google") {
+        // For Google, we rely on One Tap which handles this automatically
+        // The useOneTap prop on GoogleLogin will handle returning users
+        setAttemptingSilentLogin(false);
+      }
+    }
+  }, [instance, router]);
 
   const handleMicrosoftLogin = async () => {
     try {
@@ -79,6 +126,11 @@ export default function Login() {
           // Sync user to backend
           await syncOAuthUser(decoded.email, decoded.name, 'google', decoded.picture);
 
+          // Set localStorage flags for returning user silent login
+          localStorage.setItem("HasSigninToPropertyEval", "true");
+          localStorage.setItem("PropertyEvalAuthProvider", "google");
+          localStorage.setItem("PropertyEvalUserEmail", decoded.email);
+
           setGoogleUser({
             email: decoded.email,
             name: decoded.name,
@@ -107,15 +159,65 @@ export default function Login() {
     toast.error("Google login failed. Please try again.");
   };
 
+  // Show loading screen while attempting silent login
+  if (attemptingSilentLogin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+        <header className="bg-gradient-to-r from-blue-700 to-blue-900 dark:from-gray-800 dark:to-gray-900 border-b border-blue-800 dark:border-gray-700">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2">
+              <Home className="w-10 h-10 text-white" />
+              <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
+            </Link>
+          </div>
+        </header>
+        <div style={{
+          minHeight: "calc(100vh - 73px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "1rem"
+        }}>
+          <div style={{
+            width: "48px",
+            height: "48px",
+            border: "4px solid rgba(255,255,255,0.2)",
+            borderTop: "4px solid #0ea5e9",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite"
+          }} />
+          <p style={{ color: "#94a3b8", fontSize: "1rem" }}>Signing you in...</p>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "2rem"
-    }}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-blue-700 to-blue-900 dark:from-gray-800 dark:to-gray-900 border-b border-blue-800 dark:border-gray-700">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <Home className="w-10 h-10 text-white" />
+            <span className="text-2xl font-bold"><span className="text-white">Property</span><span className="text-cyan-300">Eval</span></span>
+          </Link>
+        </div>
+      </header>
+
+      <div style={{
+        minHeight: "calc(100vh - 73px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2rem"
+      }}>
       <div style={{
         background: "white",
         borderRadius: "24px",
@@ -215,7 +317,8 @@ export default function Login() {
           <GoogleLogin
             onSuccess={handleGoogleSuccess}
             onError={handleGoogleError}
-            useOneTap={false}
+            useOneTap={isReturningGoogleUser}
+            auto_select={isReturningGoogleUser}
             theme="outline"
             size="large"
             width="350"
@@ -233,6 +336,7 @@ export default function Login() {
         }}>
           By signing in, you agree to our Terms of Service and Privacy Policy
         </p>
+      </div>
       </div>
     </div>
   );

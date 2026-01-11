@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, AlertCircle, CheckCircle, Info,
   BarChart3, Calendar, MapPin, Home, DollarSign, Clock,
@@ -345,10 +345,29 @@ function ComparableSelection({
             <button
               onClick={onRecalculate}
               disabled={selectedIds.length === 0}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                width: '100%',
+                padding: '1rem 2rem',
+                borderRadius: '12px',
+                border: 'none',
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                cursor: selectedIds.length === 0 ? 'not-allowed' : 'pointer',
+                color: 'white',
+                background: selectedIds.length === 0 ? '#94a3b8' : '#dc2626',
+                animation: selectedIds.length === 0 ? 'none' : 'pulse-red 1.5s ease-in-out infinite',
+                boxShadow: '0 4px 15px rgba(220, 38, 38, 0.4)',
+                opacity: selectedIds.length === 0 ? 0.5 : 1
+              }}
             >
-              Recalculate with {selectedIds.length} Selected
+              Evaluate with {selectedIds.length} Selected
             </button>
+            <style jsx>{`
+              @keyframes pulse-red {
+                0%, 100% { background: #dc2626; }
+                50% { background: #ef4444; }
+              }
+            `}</style>
           </div>
 
           <div className="max-h-96 overflow-y-auto">
@@ -429,8 +448,19 @@ export default function ValuationQuality({
   currentValue
 }: ValuationQualityProps) {
   const [localSelected, setLocalSelected] = useState<string[]>(
-    selectedComparables || comparables?.map(c => c.id) || []
+    selectedComparables || []
   );
+
+  // Sync local state when parent's selectedComparables changes
+  // This ensures the first 5 are selected when historicSalesData loads
+  useEffect(() => {
+    if (selectedComparables && selectedComparables.length > 0) {
+      setLocalSelected(selectedComparables);
+    } else if (comparables && comparables.length > 0 && localSelected.length === 0) {
+      // Fallback: select first 5 if parent hasn't set selections yet
+      setLocalSelected(comparables.slice(0, 5).map(c => c.id));
+    }
+  }, [selectedComparables, comparables]);
 
   const handleToggle = (id: string) => {
     setLocalSelected(prev =>

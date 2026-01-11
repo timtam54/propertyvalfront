@@ -556,7 +556,7 @@ export default function PropertyEvaluationPage() {
   }));
 
   // Initialize selected comparables when historicSalesData loads
-  // If property has saved selections, use those; otherwise select all
+  // If property has saved selections, use those; otherwise select first 5 (best matches)
   useEffect(() => {
     if (historicSalesData.length > 0) {
       if (property?.selected_comparables && property.selected_comparables.length > 0) {
@@ -566,12 +566,12 @@ export default function PropertyEvaluationPage() {
         if (validSelections.length > 0) {
           setSelectedComparableIds(validSelections);
         } else {
-          // Saved selections are stale, select all
-          setSelectedComparableIds(validIds);
+          // Saved selections are stale, select first 5 by default (data is already sorted by best match)
+          setSelectedComparableIds(historicSalesData.slice(0, 5).map(s => s.id));
         }
       } else {
-        // No saved selections, select all by default
-        setSelectedComparableIds(historicSalesData.map(s => s.id));
+        // No saved selections, select first 5 by default (data is already sorted by best match)
+        setSelectedComparableIds(historicSalesData.slice(0, 5).map(s => s.id));
       }
     }
   }, [historicSalesData, property?.selected_comparables]);
@@ -1933,41 +1933,93 @@ export default function PropertyEvaluationPage() {
           )}
         </div>
 
-        {/* Image Gallery */}
-        {property.images && property.images.length > 0 && (
-          <div className="relative rounded-2xl overflow-hidden mb-6 shadow-lg">
-            <img
-              src={property.images[currentImageIndex]}
-              alt={`Property ${currentImageIndex + 1}`}
-              className="w-full h-64 sm:h-80 md:h-96 object-cover"
-            />
-            {property.images.length > 1 && (
-              <>
-                <button
-                  onClick={prevImage}
-                  className="absolute top-1/2 left-4 -translate-y-1/2 bg-white/90 backdrop-blur-sm w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
-                >
-                  <ChevronLeft size={24} className="text-gray-700" />
-                </button>
-                <button
-                  onClick={nextImage}
-                  className="absolute top-1/2 right-4 -translate-y-1/2 bg-white/90 backdrop-blur-sm w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
-                >
-                  <ChevronRight size={24} className="text-gray-700" />
-                </button>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/70 text-white px-4 py-2 rounded-full text-sm font-medium">
-                  {currentImageIndex + 1} / {property.images.length}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
         {/* Features */}
         {property.features && (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">Features</h2>
             <p className="text-gray-600 dark:text-gray-300 leading-relaxed">{property.features}</p>
+          </div>
+        )}
+
+        {/* Property Photos - Carousel */}
+        {property.images && property.images.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+              <span className="text-xl">📸</span>
+              Property Photos ({property.images.length})
+            </h2>
+            <div className="relative rounded-xl overflow-hidden shadow-lg">
+              <img
+                src={property.images[currentImageIndex]}
+                alt={`Property ${currentImageIndex + 1}`}
+                className="w-full h-64 sm:h-80 md:h-96 object-cover"
+              />
+              {property.images.length > 1 && (
+                <>
+                  <button
+                    onClick={prevImage}
+                    className="absolute top-1/2 left-4 -translate-y-1/2 bg-white/90 backdrop-blur-sm w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
+                  >
+                    <ChevronLeft size={24} className="text-gray-700" />
+                  </button>
+                  <button
+                    onClick={nextImage}
+                    className="absolute top-1/2 right-4 -translate-y-1/2 bg-white/90 backdrop-blur-sm w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:bg-white transition-colors"
+                  >
+                    <ChevronRight size={24} className="text-gray-700" />
+                  </button>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-900/70 text-white px-4 py-2 rounded-full text-sm font-medium">
+                    {currentImageIndex + 1} / {property.images.length}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Property Photos - Grid Gallery */}
+        {property.images && property.images.length > 0 && (
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+              padding: '2rem',
+              borderRadius: '16px',
+              border: '2px solid #cbd5e1',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <h3 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              📸 Property Photos ({property.images.length})
+            </h3>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                gap: '1rem',
+              }}
+            >
+              {property.images.map((img, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    aspectRatio: '4/3',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  }}
+                >
+                  <img
+                    src={img}
+                    alt={`Property photo ${idx + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -2067,8 +2119,49 @@ export default function PropertyEvaluationPage() {
           </div>
         </div>
 
-        {/* Historic Sales Card - ALWAYS render to populate data before evaluation */}
-        <div className="mb-6 bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
+        {/* Evaluate with RP Data / Additional Reports Button */}
+        {(property.rp_data_report || property.additional_report) && (
+          <div style={{ marginBottom: '2rem', marginTop: '1rem' }}>
+            <style>
+              {`
+                @keyframes pulse-red {
+                  0%, 100% { background: #dc2626; }
+                  50% { background: #ef4444; }
+                }
+              `}
+            </style>
+            <button
+              onClick={handleEvaluateClick}
+              disabled={evaluating}
+              style={{
+                background: evaluating ? '#94a3b8' : '#dc2626',
+                color: 'white',
+                padding: '1rem 2rem',
+                borderRadius: '12px',
+                border: 'none',
+                fontSize: '1.1rem',
+                fontWeight: '600',
+                cursor: evaluating ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 15px rgba(220, 38, 38, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                width: '100%',
+                animation: evaluating ? 'none' : 'pulse-red 1.5s ease-in-out infinite',
+                opacity: evaluating ? 0.5 : 1
+              }}
+            >
+              📄 {evaluating ? 'Evaluating...' : 'Evaluate with RP Data / Additional Reports'}
+            </button>
+            <p style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.5rem', textAlign: 'center' }}>
+              Use uploaded RP Data or Additional Reports for valuation
+            </p>
+          </div>
+        )}
+
+        {/* Historic Sales Card - Hidden but still fetches data for comparables */}
+        <div style={{ display: 'none' }}>
           <HistoricSalesCard
             propertyId={propertyId}
             propertyLocation={property.location}
@@ -2079,7 +2172,7 @@ export default function PropertyEvaluationPage() {
             propertyLatitude={property.latitude}
             propertyLongitude={property.longitude}
             variant="purple"
-            maxItems={15}
+            maxItems={50}
             showSourceLink={true}
             onSalesProcessed={setHistoricSalesData}
           />
@@ -2156,51 +2249,93 @@ export default function PropertyEvaluationPage() {
           </div>
         ) : (
           <div>
-            {/* Photo Gallery */}
-            {property.images && property.images.length > 0 && (
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-                  padding: '2rem',
-                  borderRadius: '16px',
-                  border: '2px solid #cbd5e1',
-                  marginBottom: '2rem',
-                }}
-              >
-                <h3 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '1rem', color: '#334155', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  📸 Property Photos ({property.images.length})
-                </h3>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                    gap: '1rem',
-                  }}
-                >
-                  {property.images.map((img, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        aspectRatio: '4/3',
-                        borderRadius: '12px',
-                        overflow: 'hidden',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      }}
-                    >
-                      <img
-                        src={img}
-                        alt={`Property photo ${idx + 1}`}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
+            {/* Comparable Sales Section */}
+            <div style={{ marginBottom: '2rem' }}>
+              <ValuationQuality
+                valuationHistory={property.valuation_history}
+                confidenceScoring={property.confidence_scoring}
+                suburbTrends={property.suburb_trends}
+                comparables={comparablesForDisplay.length > 0 ? comparablesForDisplay : property.comparables_data?.comparable_sold}
+                selectedComparables={selectedComparableIds}
+                onComparableToggle={handleComparableToggle}
+                onRecalculate={handleRecalculate}
+                currentValue={property.comparables_data?.statistics?.price_range?.median || undefined}
+              />
+            </div>
+
+            {/* Evaluation Type Radio Group (Read-only) */}
+            <div style={{
+              marginBottom: '2rem',
+              padding: '1rem 1.5rem',
+              background: '#f8fafc',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+            }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#64748b', marginBottom: '0.75rem' }}>
+                Valuation Data Source:
               </div>
-            )}
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'default',
+                  color: property.evaluation_type === 'H' ? '#059669' : '#94a3b8',
+                  fontWeight: property.evaluation_type === 'H' ? '600' : '400',
+                }}>
+                  <input
+                    type="radio"
+                    name="evaluationType"
+                    value="H"
+                    checked={property.evaluation_type === 'H'}
+                    readOnly
+                    style={{ cursor: 'default', accentColor: '#059669' }}
+                  />
+                  Homely
+                </label>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'default',
+                  color: property.evaluation_type === 'R' ? '#059669' : '#94a3b8',
+                  fontWeight: property.evaluation_type === 'R' ? '600' : '400',
+                }}>
+                  <input
+                    type="radio"
+                    name="evaluationType"
+                    value="R"
+                    checked={property.evaluation_type === 'R'}
+                    readOnly
+                    style={{ cursor: 'default', accentColor: '#059669' }}
+                  />
+                  RP Data / Additional Reports
+                </label>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  cursor: 'default',
+                  color: property.evaluation_type === 'A' ? '#059669' : '#94a3b8',
+                  fontWeight: property.evaluation_type === 'A' ? '600' : '400',
+                }}>
+                  <input
+                    type="radio"
+                    name="evaluationType"
+                    value="A"
+                    checked={property.evaluation_type === 'A'}
+                    readOnly
+                    style={{ cursor: 'default', accentColor: '#059669' }}
+                  />
+                  All Data
+                </label>
+              </div>
+              {!property.evaluation_type && (
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                  Not yet evaluated
+                </div>
+              )}
+            </div>
 
             {/* Improvements Detected */}
             {property.improvements_detected && (
@@ -2255,105 +2390,6 @@ export default function PropertyEvaluationPage() {
                 </div>
               </div>
             )}
-
-            {/* Re-evaluate Button - Above Report */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <button
-                onClick={handleEvaluateClick}
-                disabled={evaluating}
-                style={{
-                  background: evaluating ? '#94a3b8' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  color: 'white',
-                  padding: '1rem 2rem',
-                  borderRadius: '12px',
-                  border: 'none',
-                  cursor: evaluating ? 'not-allowed' : 'pointer',
-                  fontSize: '1.05rem',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  width: '100%',
-                  justifyContent: 'center',
-                }}
-              >
-                ✨ {evaluating ? 'Re-evaluating...' : 'Re-evaluate Property'}
-              </button>
-
-              {/* Evaluation Type Radio Group (Read-only) */}
-              <div style={{
-                marginTop: '1rem',
-                padding: '0.75rem 1rem',
-                background: '#f8fafc',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
-              }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginBottom: '0.5rem' }}>
-                  Evaluation Basis
-                </div>
-                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'default',
-                    color: property.evaluation_type === 'H' ? '#059669' : '#94a3b8',
-                    fontWeight: property.evaluation_type === 'H' ? '600' : '400',
-                  }}>
-                    <input
-                      type="radio"
-                      name="evaluationType"
-                      value="H"
-                      checked={property.evaluation_type === 'H'}
-                      readOnly
-                      style={{ cursor: 'default', accentColor: '#059669' }}
-                    />
-                    Homely
-                  </label>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'default',
-                    color: property.evaluation_type === 'R' ? '#059669' : '#94a3b8',
-                    fontWeight: property.evaluation_type === 'R' ? '600' : '400',
-                  }}>
-                    <input
-                      type="radio"
-                      name="evaluationType"
-                      value="R"
-                      checked={property.evaluation_type === 'R'}
-                      readOnly
-                      style={{ cursor: 'default', accentColor: '#059669' }}
-                    />
-                    RP Data / Other Reports
-                  </label>
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    cursor: 'default',
-                    color: property.evaluation_type === 'A' ? '#059669' : '#94a3b8',
-                    fontWeight: property.evaluation_type === 'A' ? '600' : '400',
-                  }}>
-                    <input
-                      type="radio"
-                      name="evaluationType"
-                      value="A"
-                      checked={property.evaluation_type === 'A'}
-                      readOnly
-                      style={{ cursor: 'default', accentColor: '#059669' }}
-                    />
-                    All Data
-                  </label>
-                </div>
-                {!property.evaluation_type && (
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.5rem', fontStyle: 'italic' }}>
-                    Not yet evaluated
-                  </div>
-                )}
-              </div>
-            </div>
 
             {/* Evaluation Report */}
             <div
@@ -2533,40 +2569,6 @@ export default function PropertyEvaluationPage() {
                   {property.evaluation_report}
                 </div>
               )}
-            </div>
-
-            {/* Data Source Status - BIG CLEAR INDICATOR */}
-            {property.comparables_data && (property.comparables_data.data_source?.includes('Realestate') || property.comparables_data.data_source?.includes('Domain') || property.comparables_data.data_source?.includes('Homely')) && property.comparables_data.statistics?.total_found > 0 ? (
-              <div style={{
-                marginBottom: '1.5rem',
-                padding: '1.5rem',
-                background: 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)',
-                border: '3px solid #22c55e',
-                borderRadius: '12px',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✅</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '700', color: '#15803d', marginBottom: '0.25rem' }}>
-                  {property.comparables_data.data_source}
-                </div>
-                <div style={{ fontSize: '1rem', color: '#166534' }}>
-                  {property.comparables_data.statistics?.total_found || 0} comparable sold properties found
-                </div>
-              </div>
-            ) : null}
-
-            {/* Valuation Quality Section */}
-            <div style={{ marginBottom: '2rem' }}>
-              <ValuationQuality
-                valuationHistory={property.valuation_history}
-                confidenceScoring={property.confidence_scoring}
-                suburbTrends={property.suburb_trends}
-                comparables={comparablesForDisplay.length > 0 ? comparablesForDisplay : property.comparables_data?.comparable_sold}
-                selectedComparables={selectedComparableIds}
-                onComparableToggle={handleComparableToggle}
-                onRecalculate={handleRecalculate}
-                currentValue={property.comparables_data?.statistics?.price_range?.median || undefined}
-              />
             </div>
 
             {/* Action Buttons */}

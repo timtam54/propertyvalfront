@@ -227,7 +227,13 @@ export default function HistoricSalesCard({
 
       // Show toast with data source info
       const salesCount = data.sales?.length || 0;
-      if (data.cached) {
+
+      if (data.scraperExpired) {
+        toast.error('ScraperAPI credits exhausted - renew at dashboard.scraperapi.com');
+      } else if (salesCount === 0 && data.debug) {
+        // Show the actual error reason from the API
+        toast.error(data.debug);
+      } else if (data.cached) {
         toast.success(`Loaded ${salesCount} properties from database cache`);
       } else {
         toast.success(`Scraped ${salesCount} properties fresh from Homely.com.au`);

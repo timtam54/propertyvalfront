@@ -2260,6 +2260,16 @@ export default function PropertyEvaluationPage() {
                 </p>
               </div>
             )}
+
+            {/* Comparable Sales Section - shown before evaluation */}
+            <div style={{ marginTop: '2rem' }}>
+              <ValuationQuality
+                comparables={comparablesForDisplay.length > 0 ? comparablesForDisplay : property.comparables_data?.comparable_sold}
+                selectedComparables={selectedComparableIds}
+                onComparableToggle={handleComparableToggle}
+                onRecalculate={handleRecalculate}
+              />
+            </div>
           </div>
         ) : (
           <div>

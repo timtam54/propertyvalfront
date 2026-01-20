@@ -250,7 +250,7 @@ function parseLocation(location: string): { suburb: string; state: string; postc
  * Returns both the properties and the URL that was scraped
  * Uses ScraperAPI proxy if SCRAPER_API_KEY is set (recommended for cloud deployment)
  */
-async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<{ properties: SoldProperty[], scrapedUrl: string, debug?: string }> {
+async function scrapeHomelyProperties(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<{ properties: SoldProperty[], scrapedUrl: string, debug?: string, scraperExpired?: boolean }> {
   let targetUrl = postcode
     ? `https://www.homely.com.au/sold-properties/${suburb}-${state}-${postcode}`
     : `https://www.homely.com.au/sold-properties/${suburb}-${state}`;
@@ -286,13 +286,24 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
   try {
     const response = await fetch(fetchUrl, fetchOptions);
 
-    if (!response.ok) {
-      console.log(`[Historic Sales] HTTP ${response.status}`);
-      return { properties: [], scrapedUrl: targetUrl, debug: `HTTP ${response.status}. ${scraperApiKey ? 'Using ScraperAPI' : 'No proxy - add SCRAPER_API_KEY to bypass cloud IP blocking'}` };
+    const html = await response.text();
+    console.log(`[Historic Sales] Got ${html.length} bytes, status: ${response.status}`);
+
+    // Check for ScraperAPI credit exhaustion (can come as 200 or 403)
+    if (html.includes('exhausted') || html.includes('API Credits')) {
+      console.log('[Historic Sales] ScraperAPI credits exhausted!');
+      return {
+        properties: [],
+        scrapedUrl: targetUrl,
+        debug: 'Service temporarily unavailable. Please try again later.',
+        scraperExpired: true
+      };
     }
 
-    const html = await response.text();
-    console.log(`[Historic Sales] Got ${html.length} bytes`);
+    if (!response.ok) {
+      console.log(`[Historic Sales] HTTP ${response.status}`);
+      return { properties: [], scrapedUrl: targetUrl, debug: 'Unable to fetch property data. Please try again later.' };
+    }
 
     const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!nextDataMatch) {
@@ -467,7 +478,7 @@ async function fetchSuburbSales(
   sourceSuburb: string,
   isNeighbouring: boolean,
   skipCache: boolean = false
-): Promise<{ sales: SoldProperty[], scrapedUrl: string, cached: boolean, debug?: string | null }> {
+): Promise<{ sales: SoldProperty[], scrapedUrl: string, cached: boolean, debug?: string | null, scraperExpired?: boolean }> {
   // Check cache first (unless skipCache is true)
   if (!skipCache) {
     const cachedData = await checkCache(suburb, state, postcode, propertyType);
@@ -498,7 +509,7 @@ async function fetchSuburbSales(
   }
 
   // Scrape fresh data
-  const { properties, scrapedUrl, debug } = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
+  const { properties, scrapedUrl, debug, scraperExpired } = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
 
   // Mark with source suburb and neighbouring flag
   const markedProperties = properties.map(p => ({
@@ -529,7 +540,7 @@ async function fetchSuburbSales(
     storeInCache(suburb, state, postcode, propertyType, markedProperties, scrapedUrl);
   }
 
-  return { sales: markedProperties, scrapedUrl, cached: false, debug };
+  return { sales: markedProperties, scrapedUrl, cached: false, debug, scraperExpired };
 }
 
 /**
@@ -641,6 +652,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       total: sortedSales.length,
       scrapedUrl: mainResult.scrapedUrl,
       debug: mainResult.debug || null,
+      scraperExpired: mainResult.scraperExpired || false,
       // Neighbouring suburb info
       neighbouringSuburb: neighbouringInfo
     });

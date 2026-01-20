@@ -24,6 +24,16 @@ const GooglePlacesAutocomplete = ({ value, onChange, onSelect, placeholder, requ
       autocompleteRef.current.addListener('place_changed', () => {
         const place = autocompleteRef.current.getPlace();
 
+        // Handle invalid Place ID error - the place object may be incomplete
+        if (!place || !place.address_components) {
+          console.warn('Place details not available - Place ID may be invalid or expired');
+          // Use the text from the input field as fallback
+          if (inputRef.current?.value) {
+            onSelect(inputRef.current.value);
+          }
+          return;
+        }
+
         if (place && place.formatted_address) {
           // Format the address with all components
           let formattedAddress = '';

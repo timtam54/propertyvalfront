@@ -77,15 +77,15 @@ export default function ReportUploadModal({
         </div>
 
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <button
+          {/*<button
             onClick={() => setUploadMethod("pdf")}
             className={`flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-colors ${
               uploadMethod === "pdf" ? colors.activeButton : "bg-gray-100 text-gray-600"
             }`}
           >
             <FileText size={18} />
-            Upload PDF
-          </button>
+            Upload PDF.
+          </button>*/}
           <button
             onClick={() => setUploadMethod("text")}
             className={`flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-colors ${

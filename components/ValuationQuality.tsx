@@ -306,13 +306,18 @@ function ComparableSelection({
 }) {
   const [expanded, setExpanded] = useState(true); // Start expanded to show comparables
 
+  // Deduplicate comparables by id to prevent React key warnings
+  const uniqueComparables = comparables.filter(
+    (comp, index, self) => index === self.findIndex(c => c.id === comp.id)
+  );
+
   const formatPrice = (price: number) => {
     if (price >= 1000000) return `$${(price / 1000000).toFixed(2)}M`;
     return `$${(price / 1000).toFixed(0)}K`;
   };
 
   // Get data source from first comparable
-  const dataSource = comparables[0]?.source || 'Market Data';
+  const dataSource = uniqueComparables[0]?.source || 'Market Data';
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -329,7 +334,7 @@ function ComparableSelection({
               Comparable Sales from {dataSource.includes('Homely') ? 'Homely.com.au' : dataSource.includes('Realestate') ? 'realestate.com.au' : dataSource.includes('Domain') ? 'Domain.com.au' : dataSource}
             </h3>
             <p className="text-sm text-gray-500">
-              {comparables.length} similar properties found • {selectedIds.length} selected for valuation
+              {uniqueComparables.length} similar properties found • {selectedIds.length} selected for valuation
             </p>
           </div>
         </div>
@@ -371,7 +376,7 @@ function ComparableSelection({
           </div>
 
           <div className="max-h-96 overflow-y-auto">
-            {comparables.map((comp) => {
+            {uniqueComparables.map((comp) => {
               const isSelected = selectedIds.includes(comp.id);
               return (
                 <div

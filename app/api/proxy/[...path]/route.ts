@@ -26,9 +26,7 @@ async function proxyRequest(request: NextRequest, { params }: RouteParams) {
   console.log(`[Proxy] ${request.method} ${fullUrl}`);
 
   try {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
+    const headers: HeadersInit = {};
 
     // Forward authorization header if present
     const authHeader = request.headers.get('authorization');
@@ -54,9 +52,20 @@ async function proxyRequest(request: NextRequest, { params }: RouteParams) {
 
     // Include body for POST, PUT, PATCH
     if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
-      const body = await request.text();
-      if (body) {
-        fetchOptions.body = body;
+      const contentType = request.headers.get('content-type');
+
+      // Handle multipart/form-data (file uploads) differently
+      if (contentType?.includes('multipart/form-data')) {
+        // Pass through the body as-is and let fetch set the content-type with boundary
+        fetchOptions.body = await request.arrayBuffer();
+        headers['Content-Type'] = contentType;
+      } else {
+        // For JSON and other content types
+        headers['Content-Type'] = contentType || 'application/json';
+        const body = await request.text();
+        if (body) {
+          fetchOptions.body = body;
+        }
       }
     }
 

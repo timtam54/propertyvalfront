@@ -425,14 +425,36 @@ export default function PropertyEvaluationPage() {
     setUploadingRpData(true);
     try {
       if (data.type === "pdf" && data.file) {
+        // Extract text from PDF
         const formData = new FormData();
         formData.append('file', data.file);
-        await fetch(`${API}/properties/${propertyId}/upload-rp-data-pdf`, {
+        const extractResponse = await fetch(`${API}/properties/extract-pdf-text`, {
           method: 'POST',
           body: formData,
         });
-        await fetchProperty();
-        toast.success("PDF uploaded successfully!");
+
+        if (!extractResponse.ok) {
+          throw new Error('Failed to extract text from PDF');
+        }
+
+        const extractData = await extractResponse.json();
+        if (!extractData.success || !extractData.text) {
+          throw new Error('Failed to extract text from PDF');
+        }
+
+        // Save extracted text to property
+        const saveResponse = await fetch(`${API}/properties/${propertyId}/update-rp-data`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ report: extractData.text }),
+        });
+
+        if (!saveResponse.ok) {
+          throw new Error(`Failed to save: ${saveResponse.status}`);
+        }
+
+        setProperty((prev) => prev ? { ...prev, rp_data_report: extractData.text } : null);
+        toast.success("PDF text extracted and saved successfully!");
       } else if (data.type === "text" && data.text) {
         const textResponse = await fetch(`${API}/properties/${propertyId}/update-rp-data`, {
           method: 'PUT',

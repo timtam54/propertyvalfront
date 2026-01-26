@@ -476,12 +476,14 @@ export default function PropertyEdit({ property, userEmail, onSave, onClose, isO
     });
 
     if (!response.ok) {
-      throw new Error('Failed to extract text from PDF');
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = errorData.detail || 'Failed to extract text from PDF';
+      throw new Error(errorMsg);
     }
 
     const data = await response.json();
     if (!data.success || !data.text) {
-      throw new Error('Failed to extract text from PDF');
+      throw new Error('No text could be extracted from this PDF. It may be a scanned document. Please use "Paste Text" instead.');
     }
 
     return data.text;

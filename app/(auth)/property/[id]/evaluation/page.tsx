@@ -434,12 +434,14 @@ export default function PropertyEvaluationPage() {
         });
 
         if (!extractResponse.ok) {
-          throw new Error('Failed to extract text from PDF');
+          const errorData = await extractResponse.json().catch(() => ({}));
+          const errorMsg = errorData.detail || 'Failed to extract text from PDF';
+          throw new Error(errorMsg);
         }
 
         const extractData = await extractResponse.json();
         if (!extractData.success || !extractData.text) {
-          throw new Error('Failed to extract text from PDF');
+          throw new Error('No text could be extracted from this PDF. It may be a scanned document. Please use "Paste Text" instead.');
         }
 
         // Save extracted text to property

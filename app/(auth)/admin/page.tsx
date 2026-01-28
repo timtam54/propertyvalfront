@@ -7,7 +7,7 @@ import {
   ArrowLeft, Users, Activity, BarChart3, Clock,
   Globe, FileText, RefreshCw, ChevronDown, ChevronUp,
   Calendar, Eye, TrendingUp, Settings, Key, Search,
-  MapPin, Home, ExternalLink, LogIn
+  MapPin, Home, ExternalLink, LogIn, FileSpreadsheet, Upload
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { API } from '@/lib/config';
@@ -828,6 +828,28 @@ export default function AdminPage() {
         {/* Property Searches Tab */}
         {activeTab === 'searches' && (
           <div className="space-y-6">
+            {/* Import NSW Sales Card */}
+            <div
+              onClick={() => router.push('/admin/nsw-sales-import')}
+              className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border-2 border-emerald-300 p-6 cursor-pointer hover:shadow-md transition-all"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500 rounded-lg">
+                    <Upload className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-emerald-900">Import NSW Property Sales</h3>
+                    <p className="text-sm text-emerald-700">Upload Excel files from NSW Valuer General to add historic sales data</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-600">
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span className="text-sm font-medium">Upload Excel</span>
+                </div>
+              </div>
+            </div>
+
             {/* Summary Header */}
             <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-200 p-6">
               <div className="flex items-center justify-between">
@@ -837,7 +859,7 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Cached Property Searches</h3>
-                    <p className="text-sm text-gray-500">Historic sales data cached from Homely.com.au (7 day TTL)</p>
+                    <p className="text-sm text-gray-500">Historic sales data from Homely.com.au and NSW Valuer General</p>
                   </div>
                 </div>
                 <div className="text-right">

@@ -408,6 +408,38 @@ async function scrapeHomelyProperties(suburb: string, state: string, postcode: s
 }
 
 /**
+ * Check for NSW Valuer General imported data (official government data - no expiry)
+ * For NSW properties, this takes priority over Homely scraping
+ */
+async function checkNSWData(suburb: string, postcode: string | null, propertyType: string | null): Promise<any | null> {
+  try {
+    const params = new URLSearchParams({
+      suburb: suburb,
+      ...(postcode && { postcode }),
+      ...(propertyType && { propertyType })
+    });
+
+    const response = await fetch(`${BACKEND_URL}/api/historic-sales-cache/nsw-data?${params}`);
+    if (!response.ok) {
+      console.log(`[Historic Sales] NSW data check failed: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.found && data.sales && data.sales.length > 0) {
+      console.log(`[Historic Sales] NSW Valuer General data found: ${data.total} records for ${suburb}`);
+      return data;
+    }
+
+    console.log(`[Historic Sales] No NSW Valuer General data for ${suburb}`);
+    return null;
+  } catch (error) {
+    console.log(`[Historic Sales] NSW data check error: ${error}`);
+    return null;
+  }
+}
+
+/**
  * Check backend cache for historic sales data (cached for 7 days)
  */
 async function checkCache(suburb: string, state: string, postcode: string | null, propertyType: string | null): Promise<any | null> {
@@ -468,7 +500,9 @@ async function storeInCache(suburb: string, state: string, postcode: string | nu
 }
 
 /**
- * Helper to fetch sales for a suburb (from cache or scrape)
+ * Helper to fetch sales for a suburb
+ * For NSW: Uses imported NSW Valuer General data (official government data)
+ * For other states: Uses cache or scrapes from Homely
  */
 async function fetchSuburbSales(
   suburb: string,
@@ -478,7 +512,33 @@ async function fetchSuburbSales(
   sourceSuburb: string,
   isNeighbouring: boolean,
   skipCache: boolean = false
-): Promise<{ sales: SoldProperty[], scrapedUrl: string, cached: boolean, debug?: string | null, scraperExpired?: boolean }> {
+): Promise<{ sales: SoldProperty[], scrapedUrl: string, cached: boolean, debug?: string | null, scraperExpired?: boolean, source?: string }> {
+
+  // For NSW properties, check for NSW Valuer General imported data first
+  if (state.toLowerCase() === 'nsw') {
+    console.log(`[Historic Sales] NSW property - checking for NSW Valuer General data...`);
+    const nswData = await checkNSWData(suburb, postcode, propertyType);
+
+    if (nswData && nswData.sales && nswData.sales.length > 0) {
+      console.log(`[Historic Sales] Using NSW Valuer General data: ${nswData.sales.length} records`);
+
+      const nswSales = nswData.sales.map((p: any) => ({
+        ...p,
+        source_suburb: sourceSuburb,
+        is_neighbouring: isNeighbouring
+      }));
+
+      return {
+        sales: nswSales,
+        scrapedUrl: 'NSW Valuer General (imported)',
+        cached: true,
+        source: 'nsw-valuer-general'
+      };
+    }
+
+    console.log(`[Historic Sales] No NSW Valuer General data found, falling back to Homely...`);
+  }
+
   // Check cache first (unless skipCache is true)
   if (!skipCache) {
     const cachedData = await checkCache(suburb, state, postcode, propertyType);
@@ -508,7 +568,7 @@ async function fetchSuburbSales(
     }
   }
 
-  // Scrape fresh data
+  // Scrape fresh data from Homely
   const { properties, scrapedUrl, debug, scraperExpired } = await scrapeHomelyProperties(suburb, state, postcode, propertyType);
 
   // Mark with source suburb and neighbouring flag

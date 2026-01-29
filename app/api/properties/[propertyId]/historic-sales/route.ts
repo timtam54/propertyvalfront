@@ -713,6 +713,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       scrapedUrl: mainResult.scrapedUrl,
       debug: mainResult.debug || null,
       scraperExpired: mainResult.scraperExpired || false,
+      // Data source info
+      dataSource: mainResult.source || (mainResult.cached ? 'cache' : 'homely'),
       // Neighbouring suburb info
       neighbouringSuburb: neighbouringInfo
     });

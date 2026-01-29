@@ -91,13 +91,14 @@ interface CachedSale {
 
 interface CachedSearch {
   cache_key: string;
+  id: number;
   suburb: string;
   state: string;
   postcode: string | null;
   property_type: string;
   cached_at: string;
   total: number;
-  scraped_url: string;
+  scraped_url?: string;
   is_valid: boolean;
   sales: CachedSale[];
 }
@@ -132,6 +133,8 @@ export default function AdminPage() {
   const [cachedSearches, setCachedSearches] = useState<CachedSearch[]>([]);
   const [loadingSearches, setLoadingSearches] = useState(false);
   const [expandedSearch, setExpandedSearch] = useState<string | null>(null);
+  const [searchesFilter, setSearchesFilter] = useState('');
+  const [totalSearchesAvailable, setTotalSearchesAvailable] = useState(0);
 
   // Settings state
   const [savingSettings, setSavingSettings] = useState(false);
@@ -283,19 +286,56 @@ export default function AdminPage() {
     }
   };
 
-  const loadCachedSearches = async () => {
+  const loadCachedSearches = async (search?: string) => {
     setLoadingSearches(true);
     try {
-      const response = await fetch(`${API}/historic-sales-cache/all`);
+      const params = new URLSearchParams();
+      if (search) {
+        params.append('search', search);
+        params.append('limit', '30'); // Top 30 when searching
+      } else {
+        params.append('limit', '50'); // First 50 on default load
+      }
+
+      const response = await fetch(`${API}/historic-sales-cache/all?${params}`);
       const data = await response.json();
 
       if (data.success) {
         setCachedSearches(data.searches || []);
+        setTotalSearchesAvailable(data.total || 0);
       }
     } catch (error) {
       console.error('Failed to load cached searches:', error);
     } finally {
       setLoadingSearches(false);
+    }
+  };
+
+  const loadSearchProperties = async (cacheId: number) => {
+    try {
+      const response = await fetch(`${API}/historic-sales-cache/properties/${cacheId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        // Update the sales for this search in state
+        setCachedSearches(prev => prev.map(search =>
+          search.id === cacheId ? { ...search, sales: data.sales } : search
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to load search properties:', error);
+    }
+  };
+
+  const handleExpandSearch = (search: CachedSearch) => {
+    if (expandedSearch === search.cache_key) {
+      setExpandedSearch(null);
+    } else {
+      setExpandedSearch(search.cache_key);
+      // Load properties if not already loaded
+      if (!search.sales || search.sales.length === 0) {
+        loadSearchProperties(search.id);
+      }
     }
   };
 
@@ -902,7 +942,44 @@ export default function AdminPage() {
             {/* Searches List */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">All Cached Searches</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Cached Searches</h3>
+                    <p className="text-sm text-gray-500">
+                      Showing {cachedSearches.length} of {totalSearchesAvailable} searches
+                      {searchesFilter && ` matching "${searchesFilter}"`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by suburb or postcode..."
+                        value={searchesFilter}
+                        onChange={(e) => setSearchesFilter(e.target.value)}
+                        onBlur={() => loadCachedSearches(searchesFilter || undefined)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            loadCachedSearches(searchesFilter || undefined);
+                          }
+                        }}
+                        className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 w-64"
+                      />
+                    </div>
+                    {searchesFilter && (
+                      <button
+                        onClick={() => {
+                          setSearchesFilter('');
+                          loadCachedSearches();
+                        }}
+                        className="px-3 py-2 text-sm text-red-600 hover:text-red-700 font-medium"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {loadingSearches ? (
@@ -921,7 +998,7 @@ export default function AdminPage() {
                   {cachedSearches.map(search => (
                     <div key={search.cache_key} className="hover:bg-gray-50 transition-colors">
                       <button
-                        onClick={() => setExpandedSearch(expandedSearch === search.cache_key ? null : search.cache_key)}
+                        onClick={() => handleExpandSearch(search)}
                         className="w-full p-4 flex items-center justify-between text-left"
                       >
                         <div className="flex items-center gap-4">
@@ -980,6 +1057,12 @@ export default function AdminPage() {
                             )}
                           </div>
 
+                          {(!search.sales || search.sales.length === 0) ? (
+                            <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-500 mx-auto mb-2"></div>
+                              <p className="text-sm text-gray-500">Loading properties...</p>
+                            </div>
+                          ) : (
                           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                             <table className="w-full">
                               <thead className="bg-gray-50">
@@ -1014,6 +1097,7 @@ export default function AdminPage() {
                               </div>
                             )}
                           </div>
+                          )}
                         </div>
                       )}
                     </div>

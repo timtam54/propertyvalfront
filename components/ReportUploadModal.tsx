@@ -108,7 +108,8 @@ export default function ReportUploadModal({
                 className="hidden"
               />
               <FileText size={32} className="text-gray-400 mb-3" />
-              <p className="font-semibold text-gray-700">Click to browse or drag & drop</p>
+              <p className="font-semibold text-gray-700">
+                or drag & drop</p>
               <p className="text-gray-400 text-sm">PDF files only (max 10MB)</p>
             </label>
             {selectedFile && (

@@ -589,7 +589,7 @@ export default function PropertyEvaluationPage() {
     sold_date: sale.sold_date,
     distance_km: sale.distance,
     similarity_score: sale.similarity,
-    source: 'homely.com.au',
+    source: sale.source || 'homely.com.au',
     land_size: sale.land_area,
   }));
 
